@@ -1,0 +1,12 @@
+# Binary and logs
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Configuration
+config.json
+
+# Go
+/vendor/
+/bin/
