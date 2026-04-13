@@ -1,0 +1,7 @@
+{
+  "port": 8080,
+  "database": "smoll.db",
+  "api_key": "YOUR_SECRET_API_KEY",
+  "password": "YOUR_ADMIN_PASSWORD",
+  "slug_length": 6
+}
