@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SMOLL_URL // SYSTEM</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div class="scanlines"></div>
+    <div class="noise"></div>
+    
+    <main class="terminal-container">
+      <header class="sys-header">
+        <div class="header-left">
+          <pre class="ascii-logo">
+  ___ __  __  ___  _    _       _   _ ___ _    
+ / __|  \/  |/ _ \| |  | |____ | | | | _ \ |   
+ \__ \ |\/| | (_) | |__| |___| | |_| |   / |__ 
+ |___/_|  |_|\___/|____|____|   \___/|_|_\____|
+          </pre>
+        </div>
+        <div class="sys-info">
+          <div class="status-indicator">
+            <div class="dot blink"></div>
+            <span>SYS_ONLINE</span>
+          </div>
+          <div class="auth-status">
+            <span>SECURE_ENCLAVE</span>
+          </div>
+          <button id="logout" type="button" class="btn btn-ghost" style="display: none;">[ TERMINATE ]</button>
+        </div>
+      </header>
+
+      <div id="login-view" class="view-section">
+        <div class="panel auth-panel">
+          <div class="panel-decor top-left"></div>
+          <div class="panel-decor bottom-right"></div>
+          
+          <div class="panel-header">
+            <h2><span class="text-lime">::</span> AUTHENTICATION_REQUIRED</h2>
+          </div>
+          <div class="panel-body">
+            <p class="sys-prompt">System locked. Please provide credentials to access routing tables.</p>
+            <form id="login-form">
+              <div class="form-group input-wrapper">
+                <label for="password">ACCESS_KEY</label>
+                <div class="input-row">
+                  <span class="prompt-char">$&gt;</span>
+                  <input id="password" type="password" placeholder="ENTER_PASSPHRASE_HERE" autofocus />
+                </div>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="btn btn-primary w-full">
+                  <span class="btn-text">INITIALIZE_SESSION</span>
+                  <span class="btn-glitch"></span>
+                </button>
+              </div>
+            </form>
+            <div id="session-result" class="output-line"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="app-view" class="view-section" style="display: none;">
+        <div class="grid-layout">
+          <!-- CREATE LINK PANEL -->
+          <section class="panel">
+            <div class="panel-decor top-right"></div>
+            <div class="panel-header">
+              <h2><span class="text-cyan">::</span> ALLOCATE_ROUTER</h2>
+            </div>
+            <div class="panel-body">
+              <form id="create-form">
+                <div class="form-group input-wrapper">
+                  <label for="longlink">TARGET_VECTOR (URL)</label>
+                  <div class="input-row">
+                    <span class="prompt-char">$&gt;</span>
+                    <input id="longlink" type="url" required placeholder="https://..." />
+                  </div>
+                </div>
+
+                <div class="grid-2-col">
+                  <div class="form-group input-wrapper">
+                    <label for="shortlink">CUSTOM_ALIAS (OPTIONAL)</label>
+                    <div class="input-row">
+                      <span class="prompt-char">$&gt;</span>
+                      <input id="shortlink" type="text" placeholder="random_hash" />
+                    </div>
+                  </div>
+
+                  <div class="form-group input-wrapper">
+                    <label for="expiry">TTL_SECONDS (0 = INF)</label>
+                    <div class="input-row">
+                      <span class="prompt-char">$&gt;</span>
+                      <input id="expiry" type="number" min="0" value="0" />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="form-actions align-right">
+                  <button type="submit" class="btn btn-primary">
+                    <span class="btn-text">EXECUTE_SHRINK</span>
+                    <span class="btn-glitch"></span>
+                  </button>
+                </div>
+              </form>
+              <div id="create-result" class="output-line success-out"></div>
+            </div>
+          </section>
+        </div>
+
+        <!-- TABLE PANEL -->
+        <section class="panel table-panel">
+          <div class="panel-decor bottom-left"></div>
+          <div class="panel-header flex-between">
+            <h2><span class="text-cyan">::</span> ACTIVE_ROUTING_TABLE</h2>
+            <button id="refresh" class="btn btn-outline btn-sm">[ SYNC_DB ]</button>
+          </div>
+          <div class="panel-body no-pad">
+            <div class="table-wrapper">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>SLUG</th>
+                    <th>TARGET_VECTOR</th>
+                    <th class="text-right">HITS</th>
+                    <th class="text-right">EXPIRY</th>
+                  </tr>
+                </thead>
+                <tbody id="rows">
+                  <!-- JS Injected -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script src="/static/script.js" defer></script>
+  </body>
+</html>
