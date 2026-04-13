@@ -1,0 +1,11 @@
+.git
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+smoll-url
+config.json
+patch.diff
+/bin/
+/vendor/
+.gemini/
