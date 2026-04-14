@@ -26,23 +26,24 @@ go build ./cmd/smoll-url
 
 ### 2. Configuration
 
-`smoll-url` reads `config.json` from the current directory by default.
+`smoll-url` uses environment variables only.
 
-- Environment variables override values from `config.json`.
-- You can load a different file with `config_file=/path/to/config.json ./smoll-url`.
+For local/dev usage, copy and edit `.env.example`:
 
-Create a config file with your preferred settings:
+```bash
+cp .env.example .env
+```
 
-```json
-{
-  "listen_address": "0.0.0.0",
-  "port": 8080,
-  "database": "urls.db",
-  "api_key": "your-secret-api-key",
-  "password": "your-admin-password",
-  "slug_length": 6,
-  "use_wal_mode": true
-}
+Example `.env`:
+
+```dotenv
+listen_address=0.0.0.0
+port=4567
+db_url=urls.sqlite
+password=your-admin-password
+api_key=your-secret-api-key
+slug_length=6
+use_wal_mode=true
 ```
 
 ### 3. Execution
@@ -53,7 +54,7 @@ Run the binary:
 ./smoll-url
 ```
 
-The server will initialize the SQLite database and start listening on the configured port. Access the web UI at `http://localhost:8080`.
+The server will initialize the SQLite database and start listening on the configured port. Access the web UI at `http://localhost:<port>`.
 
 ## API Usage
 
