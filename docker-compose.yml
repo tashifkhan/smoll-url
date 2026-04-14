@@ -4,16 +4,21 @@ services:
     container_name: smoll-url
     restart: unless-stopped
     ports:
-      - "8080:4567"
+      - "${HOST_PORT:-8080}:${port:-4567}"
     volumes:
       - smoll-data:/data
+    env_file:
+      - .env
     environment:
-      - password=changeme          # admin password – CHANGE THIS
-      - api_key=changeme           # API key        – CHANGE THIS
-      - slug_length=6
-      - use_wal_mode=true
+      listen_address: 0.0.0.0
+      port: ${port:-4567}
+      db_url: ${db_url:-/data/urls.db}
+      password: ${password:-changeme}
+      api_key: ${api_key:-changeme}
+      slug_length: ${slug_length:-6}
+      use_wal_mode: ${use_wal_mode:-true}
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4567/"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:${port:-4567}/"]
       interval: 30s
       timeout: 5s
       retries: 3
