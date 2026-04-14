@@ -79,6 +79,7 @@ Notes:
 - Boolean values accept `true/false`, `1/0`, `yes/no`, `on/off`, `enable/disable`.
 - Values already present in the process environment take precedence over `.env` values.
 - If `password` and `api_key` are both empty and `public_mode=false`, protected endpoints require login and will reject unauthenticated access.
+- For Docker Compose, set `DOCKER_DB_URL=/data/urls.db` (included in `.env.example`) so SQLite writes to the mounted volume.
 
 ### 2.2 Docker Compose
 
