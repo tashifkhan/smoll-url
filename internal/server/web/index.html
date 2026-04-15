@@ -113,7 +113,9 @@
                 <p class="short-output-label">SHORT_URL</p>
                 <div class="short-output-row">
                   <a id="created-short-url" class="short-output-link" href="#" target="_blank" rel="noopener noreferrer"></a>
-                  <button id="copy-short-url" type="button" class="btn btn-outline btn-sm">[ COPY ]</button>
+                  <button id="copy-short-url" type="button" class="btn btn-outline btn-sm" style="padding: 0.3rem 0.4rem; display: flex; align-items: center; justify-content: center;" title="Copy to clipboard">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                  </button>
                 </div>
                 <p id="copy-result" class="copy-result"></p>
               </div>
@@ -126,7 +128,10 @@
           <div class="panel-decor bottom-left"></div>
           <div class="panel-header flex-between">
             <h2><span class="text-cyan">::</span> ACTIVE_ROUTING_TABLE</h2>
-            <button id="refresh" class="btn btn-outline btn-sm">[ SYNC_DB ]</button>
+            <div style="display: flex; gap: 1rem; align-items: center;">
+              <button id="toggle-full-url" class="btn btn-ghost btn-sm" style="color: var(--text-dim);">[ FULL_URL: OFF ]</button>
+              <button id="refresh" class="btn btn-outline btn-sm">[ SYNC_DB ]</button>
+            </div>
           </div>
           <div class="panel-body no-pad">
             <div class="table-wrapper">

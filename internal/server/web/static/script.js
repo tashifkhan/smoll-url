@@ -14,6 +14,9 @@ const createdShortURL = document.getElementById("created-short-url");
 const copyShortURLBtn = document.getElementById("copy-short-url");
 const copyResult = document.getElementById("copy-result");
 
+const copyIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+const checkIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+
 function setText(el, text) {
   el.textContent = text;
 }
@@ -77,6 +80,74 @@ async function checkAuth() {
   }
 }
 
+let currentTableData = [];
+let showFullUrl = false;
+const toggleFullUrlBtn = document.getElementById("toggle-full-url");
+
+if (toggleFullUrlBtn) {
+  toggleFullUrlBtn.addEventListener("click", () => {
+    showFullUrl = !showFullUrl;
+    toggleFullUrlBtn.textContent = showFullUrl ? "[ FULL_URL: ON ]" : "[ FULL_URL: OFF ]";
+    toggleFullUrlBtn.style.color = showFullUrl ? "var(--lime-accent)" : "var(--text-dim)";
+    if (currentTableData.length > 0) {
+      renderTableRows(currentTableData);
+    }
+  });
+}
+
+function renderTableRows(data) {
+  rows.innerHTML = "";
+  
+  if (data.length === 0) {
+    rows.innerHTML = `<tr><td colspan="4" style="text-align:center; color: var(--text-dim); padding: 2rem;">NO_RECORDS_FOUND</td></tr>`;
+    return;
+  }
+  
+  const baseUrl = window.location.origin;
+
+  for (const row of data) {
+    const displayUrl = showFullUrl ? `${baseUrl}/${row.shortlink}` : row.shortlink;
+    const copyUrl = `${baseUrl}/${row.shortlink}`;
+    
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>
+        <div style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem;">
+          <a href="/${row.shortlink}" target="_blank" rel="noopener noreferrer" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px; display: inline-block; vertical-align: middle;">${displayUrl}</a>
+          <button class="btn btn-outline btn-sm copy-row-btn" data-url="${copyUrl}" type="button" style="flex-shrink: 0; padding: 0.3rem 0.4rem; display: flex; align-items: center; justify-content: center;" title="Copy to clipboard">${copyIconSvg}</button>
+        </div>
+      </td>
+      <td><a href="${row.longlink}" target="_blank" rel="noopener noreferrer" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; display: inline-block; vertical-align: middle;">${row.longlink}</a></td>
+      <td class="text-right">${row.hits}</td>
+      <td class="text-right">${formatExpiry(row.expiry_time)}</td>
+    `;
+    rows.appendChild(tr);
+  }
+}
+
+if (rows) {
+  rows.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".copy-row-btn");
+    if (btn) {
+      const url = btn.getAttribute("data-url");
+      try {
+        await navigator.clipboard.writeText(url);
+        const originalHtml = copyIconSvg;
+        btn.innerHTML = checkIconSvg;
+        btn.style.borderColor = "var(--lime-accent)";
+        btn.style.color = "var(--lime-accent)";
+        setTimeout(() => {
+          btn.innerHTML = originalHtml;
+          btn.style.borderColor = "";
+          btn.style.color = "";
+        }, 2000);
+      } catch (err) {
+        console.error("Failed to copy", err);
+      }
+    }
+  });
+}
+
 async function refreshTable() {
   setLoading(refreshBtn, true);
   rows.innerHTML = `<tr class="table-loader"><td colspan="4">SYNCING_DATA_RECORDS...</td></tr>`;
@@ -89,23 +160,8 @@ async function refreshTable() {
       return;
     }
 
-    const data = await res.json();
-    rows.innerHTML = "";
-    
-    if (data.length === 0) {
-      rows.innerHTML = `<tr><td colspan="4" style="text-align:center; color: var(--text-dim); padding: 2rem;">NO_RECORDS_FOUND</td></tr>`;
-    }
-    
-    for (const row of data) {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td><a href="/${row.shortlink}" target="_blank" rel="noopener noreferrer">${row.shortlink}</a></td>
-        <td><a href="${row.longlink}" target="_blank" rel="noopener noreferrer">${row.longlink}</a></td>
-        <td class="text-right">${row.hits}</td>
-        <td class="text-right">${formatExpiry(row.expiry_time)}</td>
-      `;
-      rows.appendChild(tr);
-    }
+    currentTableData = await res.json();
+    renderTableRows(currentTableData);
   } catch(e) {
     rows.innerHTML = `<tr><td colspan="4" class="text-lime">ERR_CONNECTION_DROPPED</td></tr>`;
   }
@@ -173,6 +229,14 @@ copyShortURLBtn.addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(targetURL);
     setText(copyResult, "COPIED_TO_CLIPBOARD");
+    copyShortURLBtn.innerHTML = checkIconSvg;
+    copyShortURLBtn.style.borderColor = "var(--lime-accent)";
+    copyShortURLBtn.style.color = "var(--lime-accent)";
+    setTimeout(() => {
+      copyShortURLBtn.innerHTML = copyIconSvg;
+      copyShortURLBtn.style.borderColor = "";
+      copyShortURLBtn.style.color = "";
+    }, 2000);
   } catch (e) {
     setText(copyResult, "COPY_FAILED");
   }
