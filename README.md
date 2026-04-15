@@ -100,6 +100,123 @@ Run the binary:
 
 The server will initialize the SQLite database and start listening on the configured port. Access the web UI at `http://localhost:<port>`.
 
+## Self-Hosting Guide
+
+This section covers practical production deployment patterns for VPS/home-server setups.
+
+### Option A: Run as a Binary + systemd (recommended for minimal setups)
+
+1. Build and place the binary:
+
+```bash
+go build -o smoll-url ./cmd/smoll-url
+sudo mkdir -p /opt/smoll-url
+sudo mv smoll-url /opt/smoll-url/
+```
+
+2. Create `.env` at `/opt/smoll-url/.env`:
+
+```dotenv
+listen_address=0.0.0.0
+port=8080
+db_url=/opt/smoll-url/urls.db
+password=change-me
+api_key=change-me
+use_wal_mode=true
+```
+
+3. Create `/etc/systemd/system/smoll-url.service`:
+
+```ini
+[Unit]
+Description=smoll-url URL shortener
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/smoll-url
+ExecStart=/opt/smoll-url/smoll-url
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+```
+
+4. Start and enable service:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now smoll-url
+sudo systemctl status smoll-url
+```
+
+### Option B: Run with Docker Compose
+
+1. Copy env template and configure secrets:
+
+```bash
+cp .env.example .env
+```
+
+2. Use persistent DB path for container mode:
+
+```dotenv
+DOCKER_DB_URL=/data/urls.db
+```
+
+3. Start container:
+
+```bash
+docker compose up -d --build
+docker compose logs -f smoll-url
+```
+
+### Reverse Proxy (Nginx Proxy Manager)
+
+If using NPM with Docker-network routing:
+
+- Attach `smoll-url` and NPM to the same Docker network.
+- In NPM Proxy Host:
+  - `Scheme`: `http`
+  - `Forward Hostname/IP`: `smoll-url`
+  - `Forward Port`: `<port inside container>` (for example `8080`)
+- Enable WebSocket support in NPM.
+- Use Cloudflare SSL mode `Full` (or `Full (strict)` if certs are valid end-to-end).
+
+### Security Checklist
+
+- Change `password` and `api_key` from defaults.
+- Keep `.env` out of source control.
+- Run behind HTTPS (NPM/Caddy/Nginx/Traefik).
+- Restrict server firewall to required ports only (`80/443` for proxy, app internal only).
+- Back up SQLite DB file regularly.
+
+### Health and Troubleshooting
+
+- Check app logs:
+
+```bash
+docker compose logs -f smoll-url
+```
+
+- Confirm container network routing:
+
+```bash
+docker inspect smoll-url --format '{{json .NetworkSettings.Networks}}'
+```
+
+- Validate upstream from reverse-proxy container:
+
+```bash
+docker exec -it nginx-proxy-manager-app-1 sh -c "wget -S -O- http://smoll-url:<port>/"
+```
+
+- Common issue: `unable to open database file`
+  - Cause: container DB path points to non-writable location.
+  - Fix: set `DOCKER_DB_URL=/data/urls.db` and mount `/data` volume.
+
 ## API Usage
 
 You can interact with `smoll-url` via the web UI or directly through the REST API.

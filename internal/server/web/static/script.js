@@ -9,9 +9,28 @@ const logoutBtn = document.getElementById("logout");
 const createResult = document.getElementById("create-result");
 const sessionResult = document.getElementById("session-result");
 const rows = document.getElementById("rows");
+const createShortOutput = document.getElementById("create-short-output");
+const createdShortURL = document.getElementById("created-short-url");
+const copyShortURLBtn = document.getElementById("copy-short-url");
+const copyResult = document.getElementById("copy-result");
 
 function setText(el, text) {
   el.textContent = text;
+}
+
+function setCreatedShortURL(url) {
+  if (!url) {
+    createShortOutput.hidden = true;
+    createdShortURL.removeAttribute("href");
+    createdShortURL.textContent = "";
+    setText(copyResult, "");
+    return;
+  }
+
+  createShortOutput.hidden = false;
+  createdShortURL.href = url;
+  createdShortURL.textContent = url;
+  setText(copyResult, "");
 }
 
 function setLoading(btn, isLoading) {
@@ -98,6 +117,7 @@ createForm.addEventListener("submit", async (e) => {
   const btn = createForm.querySelector('button[type="submit"]');
   setLoading(btn, true);
   setText(createResult, "Processing...");
+  setCreatedShortURL("");
 
   const longlink = document.getElementById("longlink").value.trim();
   const shortlink = document.getElementById("shortlink").value.trim();
@@ -123,19 +143,39 @@ createForm.addEventListener("submit", async (e) => {
       return;
     }
 
+    let shortURL = "";
     if (typeof out === "string") {
-      setText(createResult, `SUCCESS: ${window.location.origin}/${out}`);
+      shortURL = `${window.location.origin}/${out}`;
     } else {
-      setText(createResult, `SUCCESS: ${out.shorturl}`);
+      shortURL = out.shorturl;
     }
+
+    setText(createResult, "SUCCESS: LINK_CREATED");
+    setCreatedShortURL(shortURL);
 
     document.getElementById("longlink").value = "";
     document.getElementById("shortlink").value = "";
     await refreshTable();
   } catch (e) {
     setText(createResult, "Error connecting to server.");
+    setCreatedShortURL("");
   }
   setLoading(btn, false);
+});
+
+copyShortURLBtn.addEventListener("click", async () => {
+  const targetURL = createdShortURL.textContent.trim();
+  if (!targetURL) {
+    setText(copyResult, "NOTHING_TO_COPY");
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(targetURL);
+    setText(copyResult, "COPIED_TO_CLIPBOARD");
+  } catch (e) {
+    setText(copyResult, "COPY_FAILED");
+  }
 });
 
 loginForm.addEventListener("submit", async (e) => {
