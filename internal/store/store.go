@@ -160,26 +160,52 @@ func (s *Store) FindURL(shortlink string) (string, int64, int64, error) {
 	return longURL, hits, expiryTime, nil
 }
 
-func (s *Store) FindAndAddHit(shortlink string) (string, error) {
+func (s *Store) FindAndAddHit(shortlink string) (string, int64, error) {
 	now := time.Now().UTC().Unix()
 	var longURL string
+	var expiryTime int64
 
 	err := s.db.QueryRow(
 		`UPDATE urls
 		 SET hits = hits + 1
 		 WHERE short_url = ? AND (expiry_time = 0 OR expiry_time > ?)
-		 RETURNING long_url`,
+		 RETURNING long_url, expiry_time`,
 		shortlink,
 		now,
-	).Scan(&longURL)
+	).Scan(&longURL, &expiryTime)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return "", ErrNotFound
+			return "", 0, ErrNotFound
 		}
-		return "", err
+		return "", 0, err
 	}
 
-	return longURL, nil
+	return longURL, expiryTime, nil
+}
+
+func (s *Store) AddHit(shortlink string) error {
+	now := time.Now().UTC().Unix()
+
+	res, err := s.db.Exec(
+		`UPDATE urls
+		 SET hits = hits + 1
+		 WHERE short_url = ? AND (expiry_time = 0 OR expiry_time > ?)`,
+		shortlink,
+		now,
+	)
+	if err != nil {
+		return err
+	}
+
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrNotFound
+	}
+
+	return nil
 }
 
 func (s *Store) EditLink(shortlink, longlink string, resetHits bool) error {

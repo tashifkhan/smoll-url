@@ -12,6 +12,9 @@ type Config struct {
 	ListenAddress          string
 	Port                   int
 	DBPath                 string
+	RedisURL               string
+	RedisCacheKeyPrefix    string
+	RedisCacheTimeoutMS    int
 	CacheControlHeader     string
 	DisableFrontend        bool
 	SiteURL                string
@@ -40,6 +43,9 @@ func Load() Config {
 		ListenAddress:          envString("listen_address", "0.0.0.0"),
 		Port:                   envInt("port", 4567),
 		DBPath:                 envStringAny([]string{"db_url", "database", "db_path"}, "urls.sqlite"),
+		RedisURL:               strings.TrimSpace(os.Getenv("redis_url")),
+		RedisCacheKeyPrefix:    envString("redis_cache_key_prefix", "smoll-url:redirect:"),
+		RedisCacheTimeoutMS:    minIntPositive(envInt("redis_cache_timeout_ms", 200), 200),
 		CacheControlHeader:     strings.TrimSpace(os.Getenv("cache_control_header")),
 		DisableFrontend:        envBool("disable_frontend", false),
 		PublicMode:             envBool("public_mode", false),
@@ -66,6 +72,11 @@ func Load() Config {
 
 	log.Printf("listening on %s:%d", cfg.ListenAddress, cfg.Port)
 	log.Printf("db path: %s", cfg.DBPath)
+	if cfg.RedisURL != "" {
+		log.Printf("redis cache configured (timeout: %dms)", cfg.RedisCacheTimeoutMS)
+	} else {
+		log.Printf("redis cache disabled (redis_url not set)")
+	}
 	if cfg.DisableFrontend {
 		log.Printf("frontend disabled")
 	}
@@ -234,4 +245,11 @@ func maxInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func minIntPositive(v int, fallback int) int {
+	if v <= 0 {
+		return fallback
+	}
+	return v
 }

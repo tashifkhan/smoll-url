@@ -33,6 +33,7 @@ type Server struct {
 	store    *store.Store
 	sessions *auth.SessionStore
 	version  string
+	cache    *redirectCache
 
 	validSlugRegex *regexp.Regexp
 }
@@ -89,12 +90,21 @@ func New(cfg config.Config, db *store.Store, version string) *Server {
 	}
 
 	return &Server{
-		cfg:            cfg,
-		store:          db,
-		sessions:       auth.NewSessionStore(),
-		version:        version,
+		cfg:      cfg,
+		store:    db,
+		sessions: auth.NewSessionStore(),
+		version:  version,
+		cache: newRedirectCache(
+			cfg.RedisURL,
+			cfg.RedisCacheKeyPrefix,
+			time.Duration(cfg.RedisCacheTimeoutMS)*time.Millisecond,
+		),
 		validSlugRegex: re,
 	}
+}
+
+func (s *Server) Close() error {
+	return s.cache.close()
 }
 
 func (s *Server) Routes() http.Handler {
@@ -303,11 +313,18 @@ func (s *Server) handleEditLink(w http.ResponseWriter, r *http.Request) {
 	err = s.store.EditLink(req.Shortlink, req.Longlink, req.ResetHits)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
+			s.cache.delete(req.Shortlink)
 			s.writeEditError(w, true, "The shortlink was not found, and could not be edited.")
 			return
 		}
 		s.writeEditError(w, false, "Something went wrong when editing the link.")
 		return
+	}
+
+	if _, _, expiryTime, err := s.store.FindURL(req.Shortlink); err == nil {
+		s.cache.set(req.Shortlink, req.Longlink, expiryTime)
+	} else {
+		s.cache.delete(req.Shortlink)
 	}
 
 	if apiResult.Success {
@@ -489,6 +506,7 @@ func (s *Server) handleDeleteLink(w http.ResponseWriter, r *http.Request) {
 
 	err := s.store.DeleteLink(shortlink)
 	if err != nil {
+		s.cache.delete(shortlink)
 		if apiResult.Success {
 			writeJSON(w, http.StatusNotFound, JSONResponse{Success: false, Error: true, Reason: "The shortlink was not found, and could not be deleted."})
 			return
@@ -496,6 +514,7 @@ func (s *Server) handleDeleteLink(w http.ResponseWriter, r *http.Request) {
 		writeText(w, http.StatusNotFound, "Not found!")
 		return
 	}
+	s.cache.delete(shortlink)
 
 	if apiResult.Success {
 		writeJSON(w, http.StatusOK, JSONResponse{Success: true, Error: false, Reason: "Deleted " + shortlink})
@@ -543,12 +562,24 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	longURL, err := s.store.FindAndAddHit(shortlink)
+	if cachedURL, ok := s.cache.get(shortlink); ok {
+		if err := s.store.AddHit(shortlink); err == nil {
+			s.redirectToURL(w, r, cachedURL)
+			return
+		}
+		s.cache.delete(shortlink)
+	}
+
+	longURL, expiryTime, err := s.store.FindAndAddHit(shortlink)
 	if err != nil {
 		write404(w)
 		return
 	}
+	s.cache.set(shortlink, longURL, expiryTime)
+	s.redirectToURL(w, r, longURL)
+}
 
+func (s *Server) redirectToURL(w http.ResponseWriter, r *http.Request, longURL string) {
 	status := http.StatusPermanentRedirect
 	if s.cfg.UseTempRedirect {
 		status = http.StatusTemporaryRedirect
@@ -592,6 +623,7 @@ func (s *Server) addLinkFromBody(body []byte, usingPublicMode bool) (string, int
 
 	expiryTime, err := s.store.AddLink(req.Shortlink, req.Longlink, req.ExpiryDelay)
 	if err == nil {
+		s.cache.set(req.Shortlink, req.Longlink, expiryTime)
 		return req.Shortlink, expiryTime, nil
 	}
 
@@ -609,6 +641,7 @@ func (s *Server) addLinkFromBody(body []byte, usingPublicMode bool) (string, int
 	if err != nil {
 		return "", 0, err
 	}
+	s.cache.set(req.Shortlink, req.Longlink, expiryTime)
 
 	return req.Shortlink, expiryTime, nil
 }
