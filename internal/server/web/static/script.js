@@ -2,11 +2,13 @@ const loginView = document.getElementById("login-view");
 const appView = document.getElementById("app-view");
 
 const createForm = document.getElementById("create-form");
+const editForm = document.getElementById("edit-form");
 const loginForm = document.getElementById("login-form");
 const refreshBtn = document.getElementById("refresh");
 const logoutBtn = document.getElementById("logout");
 
 const createResult = document.getElementById("create-result");
+const editResult = document.getElementById("edit-result");
 const sessionResult = document.getElementById("session-result");
 const rows = document.getElementById("rows");
 const createShortOutput = document.getElementById("create-short-output");
@@ -99,7 +101,7 @@ function renderTableRows(data) {
   rows.innerHTML = "";
   
   if (data.length === 0) {
-    rows.innerHTML = `<tr><td colspan="4" style="text-align:center; color: var(--text-dim); padding: 2rem;">NO_RECORDS_FOUND</td></tr>`;
+    rows.innerHTML = `<tr><td colspan="5" style="text-align:center; color: var(--text-dim); padding: 2rem;">NO_RECORDS_FOUND</td></tr>`;
     return;
   }
   
@@ -120,6 +122,11 @@ function renderTableRows(data) {
       <td><a href="${row.longlink}" target="_blank" rel="noopener noreferrer" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; display: inline-block; vertical-align: middle;">${row.longlink}</a></td>
       <td class="text-right">${row.hits}</td>
       <td class="text-right">${formatExpiry(row.expiry_time)}</td>
+      <td class="text-right">
+        <div class="row-actions">
+          <button class="btn btn-outline btn-sm edit-row-btn" data-shortlink="${row.shortlink}" type="button">[ EDIT ]</button>
+        </div>
+      </td>
     `;
     rows.appendChild(tr);
   }
@@ -127,6 +134,24 @@ function renderTableRows(data) {
 
 if (rows) {
   rows.addEventListener("click", async (e) => {
+    const editBtn = e.target.closest(".edit-row-btn");
+    if (editBtn) {
+      const shortlink = editBtn.getAttribute("data-shortlink") || "";
+      const selected = currentTableData.find((item) => item.shortlink === shortlink);
+      if (!selected) {
+        setText(editResult, "ERR_RECORD_NOT_FOUND");
+        return;
+      }
+
+      document.getElementById("edit-shortlink").value = selected.shortlink;
+      document.getElementById("edit-longlink").value = selected.longlink;
+      document.getElementById("edit-reset-hits").checked = false;
+      setText(editResult, `READY_TO_EDIT: ${selected.shortlink}`);
+      document.getElementById("edit-longlink").focus();
+      document.getElementById("edit-form").scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+
     const btn = e.target.closest(".copy-row-btn");
     if (btn) {
       const url = btn.getAttribute("data-url");
@@ -150,12 +175,12 @@ if (rows) {
 
 async function refreshTable() {
   setLoading(refreshBtn, true);
-  rows.innerHTML = `<tr class="table-loader"><td colspan="4">SYNCING_DATA_RECORDS...</td></tr>`;
+  rows.innerHTML = `<tr class="table-loader"><td colspan="5">SYNCING_DATA_RECORDS...</td></tr>`;
   
   try {
     const res = await fetch("/api/all");
     if (!res.ok) {
-      rows.innerHTML = `<tr><td colspan="4" class="text-lime">ERR_FETCHING_RECORDS</td></tr>`;
+      rows.innerHTML = `<tr><td colspan="5" class="text-lime">ERR_FETCHING_RECORDS</td></tr>`;
       setLoading(refreshBtn, false);
       return;
     }
@@ -163,7 +188,7 @@ async function refreshTable() {
     currentTableData = await res.json();
     renderTableRows(currentTableData);
   } catch(e) {
-    rows.innerHTML = `<tr><td colspan="4" class="text-lime">ERR_CONNECTION_DROPPED</td></tr>`;
+    rows.innerHTML = `<tr><td colspan="5" class="text-lime">ERR_CONNECTION_DROPPED</td></tr>`;
   }
   setLoading(refreshBtn, false);
 }
@@ -216,6 +241,45 @@ createForm.addEventListener("submit", async (e) => {
     setText(createResult, "Error connecting to server.");
     setCreatedShortURL("");
   }
+  setLoading(btn, false);
+});
+
+editForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = editForm.querySelector('button[type="submit"]');
+  setLoading(btn, true);
+  setText(editResult, "Applying edits...");
+
+  const shortlink = document.getElementById("edit-shortlink").value.trim();
+  const longlink = document.getElementById("edit-longlink").value.trim();
+  const resetHits = document.getElementById("edit-reset-hits").checked;
+
+  const payload = { shortlink, longlink, reset_hits: resetHits };
+
+  try {
+    const res = await fetch("/api/edit", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const out = await jsonOrText(res);
+    if (!res.ok) {
+      if (typeof out === "string") {
+        setText(editResult, "Error: " + out);
+      } else {
+        setText(editResult, "Error: " + (out.reason || "Could not edit short URL"));
+      }
+      setLoading(btn, false);
+      return;
+    }
+
+    setText(editResult, "SUCCESS: LINK_UPDATED");
+    await refreshTable();
+  } catch (e) {
+    setText(editResult, "Error connecting to server.");
+  }
+
   setLoading(btn, false);
 });
 
