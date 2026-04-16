@@ -22,6 +22,16 @@ type Row struct {
 	ExpiryTime int64  `json:"expiry_time"`
 }
 
+type ClickEvent struct {
+	Shortlink   string
+	ClickedAt   int64
+	IP          string
+	UserAgent   string
+	Referer     string
+	CountryCode string
+	CityName    string
+}
+
 type Store struct {
 	db         *sql.DB
 	useWALMode bool
@@ -59,6 +69,32 @@ func Open(path string, useWALMode bool, ensureACID bool) (*Store, error) {
 	if _, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_expiry_time ON urls (expiry_time)`); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("create expiry_time index: %w", err)
+	}
+
+	if _, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS click_events (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			short_url TEXT NOT NULL,
+			clicked_at INTEGER NOT NULL,
+			ip TEXT NOT NULL,
+			user_agent TEXT NOT NULL,
+			referer TEXT NOT NULL,
+			country_code TEXT NOT NULL,
+			city_name TEXT NOT NULL
+		)
+	`); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("create click_events table: %w", err)
+	}
+
+	if _, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_click_events_short_url ON click_events (short_url)`); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("create click_events short_url index: %w", err)
+	}
+
+	if _, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_click_events_clicked_at ON click_events (clicked_at)`); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("create click_events clicked_at index: %w", err)
 	}
 
 	journalMode := "DELETE"
@@ -160,26 +196,52 @@ func (s *Store) FindURL(shortlink string) (string, int64, int64, error) {
 	return longURL, hits, expiryTime, nil
 }
 
-func (s *Store) FindAndAddHit(shortlink string) (string, error) {
+func (s *Store) FindAndAddHit(shortlink string) (string, int64, error) {
 	now := time.Now().UTC().Unix()
 	var longURL string
+	var expiryTime int64
 
 	err := s.db.QueryRow(
 		`UPDATE urls
 		 SET hits = hits + 1
 		 WHERE short_url = ? AND (expiry_time = 0 OR expiry_time > ?)
-		 RETURNING long_url`,
+		 RETURNING long_url, expiry_time`,
 		shortlink,
 		now,
-	).Scan(&longURL)
+	).Scan(&longURL, &expiryTime)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return "", ErrNotFound
+			return "", 0, ErrNotFound
 		}
-		return "", err
+		return "", 0, err
 	}
 
-	return longURL, nil
+	return longURL, expiryTime, nil
+}
+
+func (s *Store) AddHit(shortlink string) error {
+	now := time.Now().UTC().Unix()
+
+	res, err := s.db.Exec(
+		`UPDATE urls
+		 SET hits = hits + 1
+		 WHERE short_url = ? AND (expiry_time = 0 OR expiry_time > ?)`,
+		shortlink,
+		now,
+	)
+	if err != nil {
+		return err
+	}
+
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrNotFound
+	}
+
+	return nil
 }
 
 func (s *Store) EditLink(shortlink, longlink string, resetHits bool) error {
@@ -303,6 +365,64 @@ func (s *Store) Cleanup() error {
 	}
 
 	if _, err := s.db.Exec(`PRAGMA optimize`); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *Store) RecordClickEvents(events []ClickEvent) error {
+	if len(events) == 0 {
+		return nil
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO click_events
+		(short_url, clicked_at, ip, user_agent, referer, country_code, city_name)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	hitIncrements := make(map[string]int64)
+	for _, event := range events {
+		if _, err := stmt.Exec(
+			event.Shortlink,
+			event.ClickedAt,
+			event.IP,
+			event.UserAgent,
+			event.Referer,
+			event.CountryCode,
+			event.CityName,
+		); err != nil {
+			_ = stmt.Close()
+			_ = tx.Rollback()
+			return err
+		}
+		hitIncrements[event.Shortlink]++
+	}
+
+	if err := stmt.Close(); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	for shortlink, inc := range hitIncrements {
+		if _, err := tx.Exec(`UPDATE urls SET hits = hits + ? WHERE short_url = ?`, inc, shortlink); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		_ = tx.Rollback()
 		return err
 	}
 

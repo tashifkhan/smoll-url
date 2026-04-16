@@ -66,6 +66,13 @@ The app loads `.env` from the current directory by default. You can point to a d
 | `public_mode_expiry_delay` | `0` | Max/forced expiry for public mode (seconds). `0` means unlimited. |
 | `use_temp_redirect` | `false` | Use temporary redirects (`307`) instead of permanent (`308`). |
 | `redirect_method` | _(unset)_ | Legacy override: `TEMPORARY` forces temporary redirect mode. |
+| `redis_url` | _(empty)_ | Redis connection URL for redirect caching (for example `redis://localhost:6379/0`). |
+| `redis_cache_key_prefix` | `smoll-url:redirect:` | Prefix used for Redis cache keys. |
+| `redis_cache_timeout_ms` | `200` | Redis operation timeout in milliseconds. |
+| `click_queue_size` | `4096` | Buffered in-memory queue size for async click events. |
+| `click_batch_size` | `200` | Number of click events written per SQLite batch transaction. |
+| `click_flush_interval_ms` | `500` | Flush interval for draining queued click events. |
+| `maxmind_db_path` | _(empty)_ | Optional MaxMind City DB (`.mmdb`) path for country/city lookup. |
 | `use_wal_mode` | `false` | Enable SQLite WAL mode. |
 | `ensure_acid` | `true` | Keep strict SQLite durability/sync settings. |
 | `disable_frontend` | `false` | Disable embedded admin frontend. |
@@ -80,6 +87,8 @@ Notes:
 - Values already present in the process environment take precedence over `.env` values.
 - If `password` and `api_key` are both empty and `public_mode=false`, protected endpoints require login and will reject unauthenticated access.
 - For Docker Compose, set `DOCKER_DB_URL=/data/urls.db` (included in `.env.example`) so SQLite writes to the mounted volume.
+- `redis_url` is optional; when unset, redirect caching is disabled.
+- `maxmind_db_path` is optional; when unset, click events are still stored without geo fields.
 
 ### 2.2 Docker Compose
 

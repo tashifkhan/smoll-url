@@ -13,16 +13,44 @@ services:
       listen_address: 0.0.0.0
       port: ${port:-4567}
       db_url: ${DOCKER_DB_URL:-/data/urls.db}
+      redis_url: ${redis_url:-redis://redis:6379/0}
       password: ${password:-changeme}
       api_key: ${api_key:-changeme}
       slug_length: ${slug_length:-6}
       use_wal_mode: ${use_wal_mode:-true}
+    depends_on:
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:${port:-4567}/"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 5s
+    networks:
+      - nginxproxyman_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: smoll-url-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+    networks:
+      - nginxproxyman_network
 
 volumes:
   smoll-data:
+  redis-data:
+
+networks:
+  nginxproxyman_network:
+    external: true
+    name: nginx-proxy-manager_nginxproxyman

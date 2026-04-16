@@ -26,6 +26,11 @@ func main() {
 	defer db.Close()
 
 	srv := server.New(cfg, db, version)
+	defer func() {
+		if err := srv.Close(); err != nil {
+			log.Printf("cache close error: %v", err)
+		}
+	}()
 	srv.StartCleanupLoop()
 
 	httpServer := &http.Server{
