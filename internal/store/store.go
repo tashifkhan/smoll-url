@@ -22,6 +22,16 @@ type Row struct {
 	ExpiryTime int64  `json:"expiry_time"`
 }
 
+type ClickEvent struct {
+	Shortlink   string
+	ClickedAt   int64
+	IP          string
+	UserAgent   string
+	Referer     string
+	CountryCode string
+	CityName    string
+}
+
 type Store struct {
 	db         *sql.DB
 	useWALMode bool
@@ -59,6 +69,32 @@ func Open(path string, useWALMode bool, ensureACID bool) (*Store, error) {
 	if _, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_expiry_time ON urls (expiry_time)`); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("create expiry_time index: %w", err)
+	}
+
+	if _, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS click_events (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			short_url TEXT NOT NULL,
+			clicked_at INTEGER NOT NULL,
+			ip TEXT NOT NULL,
+			user_agent TEXT NOT NULL,
+			referer TEXT NOT NULL,
+			country_code TEXT NOT NULL,
+			city_name TEXT NOT NULL
+		)
+	`); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("create click_events table: %w", err)
+	}
+
+	if _, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_click_events_short_url ON click_events (short_url)`); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("create click_events short_url index: %w", err)
+	}
+
+	if _, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_click_events_clicked_at ON click_events (clicked_at)`); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("create click_events clicked_at index: %w", err)
 	}
 
 	journalMode := "DELETE"
@@ -329,6 +365,64 @@ func (s *Store) Cleanup() error {
 	}
 
 	if _, err := s.db.Exec(`PRAGMA optimize`); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *Store) RecordClickEvents(events []ClickEvent) error {
+	if len(events) == 0 {
+		return nil
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO click_events
+		(short_url, clicked_at, ip, user_agent, referer, country_code, city_name)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	hitIncrements := make(map[string]int64)
+	for _, event := range events {
+		if _, err := stmt.Exec(
+			event.Shortlink,
+			event.ClickedAt,
+			event.IP,
+			event.UserAgent,
+			event.Referer,
+			event.CountryCode,
+			event.CityName,
+		); err != nil {
+			_ = stmt.Close()
+			_ = tx.Rollback()
+			return err
+		}
+		hitIncrements[event.Shortlink]++
+	}
+
+	if err := stmt.Close(); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	for shortlink, inc := range hitIncrements {
+		if _, err := tx.Exec(`UPDATE urls SET hits = hits + ? WHERE short_url = ?`, inc, shortlink); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		_ = tx.Rollback()
 		return err
 	}
 

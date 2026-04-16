@@ -15,6 +15,10 @@ type Config struct {
 	RedisURL               string
 	RedisCacheKeyPrefix    string
 	RedisCacheTimeoutMS    int
+	ClickQueueSize         int
+	ClickBatchSize         int
+	ClickFlushIntervalMS   int
+	MaxMindDBPath          string
 	CacheControlHeader     string
 	DisableFrontend        bool
 	SiteURL                string
@@ -46,6 +50,10 @@ func Load() Config {
 		RedisURL:               strings.TrimSpace(os.Getenv("redis_url")),
 		RedisCacheKeyPrefix:    envString("redis_cache_key_prefix", "smoll-url:redirect:"),
 		RedisCacheTimeoutMS:    minIntPositive(envInt("redis_cache_timeout_ms", 200), 200),
+		ClickQueueSize:         minIntPositive(envInt("click_queue_size", 4096), 4096),
+		ClickBatchSize:         minIntPositive(envInt("click_batch_size", 200), 200),
+		ClickFlushIntervalMS:   minIntPositive(envInt("click_flush_interval_ms", 500), 500),
+		MaxMindDBPath:          strings.TrimSpace(os.Getenv("maxmind_db_path")),
 		CacheControlHeader:     strings.TrimSpace(os.Getenv("cache_control_header")),
 		DisableFrontend:        envBool("disable_frontend", false),
 		PublicMode:             envBool("public_mode", false),
@@ -76,6 +84,12 @@ func Load() Config {
 		log.Printf("redis cache configured (timeout: %dms)", cfg.RedisCacheTimeoutMS)
 	} else {
 		log.Printf("redis cache disabled (redis_url not set)")
+	}
+	log.Printf("click queue configured (size: %d, batch: %d, flush: %dms)", cfg.ClickQueueSize, cfg.ClickBatchSize, cfg.ClickFlushIntervalMS)
+	if cfg.MaxMindDBPath != "" {
+		log.Printf("maxmind lookup configured (db: %s)", cfg.MaxMindDBPath)
+	} else {
+		log.Printf("maxmind lookup disabled (maxmind_db_path not set)")
 	}
 	if cfg.DisableFrontend {
 		log.Printf("frontend disabled")

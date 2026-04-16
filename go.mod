@@ -4,6 +4,7 @@ go 1.24
 
 require (
 	github.com/alexedwards/argon2id v1.0.0
+	github.com/oschwald/maxminddb-golang v1.13.1
 	github.com/redis/go-redis/v9 v9.18.0
 	modernc.org/sqlite v1.36.3
 )

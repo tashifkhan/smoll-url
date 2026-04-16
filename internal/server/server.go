@@ -34,6 +34,7 @@ type Server struct {
 	sessions *auth.SessionStore
 	version  string
 	cache    *redirectCache
+	clicks   *clickTracker
 
 	validSlugRegex *regexp.Regexp
 }
@@ -99,12 +100,13 @@ func New(cfg config.Config, db *store.Store, version string) *Server {
 			cfg.RedisCacheKeyPrefix,
 			time.Duration(cfg.RedisCacheTimeoutMS)*time.Millisecond,
 		),
+		clicks:         newClickTracker(cfg, db),
 		validSlugRegex: re,
 	}
 }
 
 func (s *Server) Close() error {
-	return s.cache.close()
+	return errors.Join(s.clicks.close(), s.cache.close())
 }
 
 func (s *Server) Routes() http.Handler {
@@ -563,20 +565,29 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if cachedURL, ok := s.cache.get(shortlink); ok {
-		if err := s.store.AddHit(shortlink); err == nil {
-			s.redirectToURL(w, r, cachedURL)
-			return
-		}
-		s.cache.delete(shortlink)
+		s.enqueueClick(shortlink, r)
+		s.redirectToURL(w, r, cachedURL)
+		return
 	}
 
-	longURL, expiryTime, err := s.store.FindAndAddHit(shortlink)
+	longURL, _, expiryTime, err := s.store.FindURL(shortlink)
 	if err != nil {
 		write404(w)
 		return
 	}
 	s.cache.set(shortlink, longURL, expiryTime)
+	s.enqueueClick(shortlink, r)
 	s.redirectToURL(w, r, longURL)
+}
+
+func (s *Server) enqueueClick(shortlink string, r *http.Request) {
+	s.clicks.enqueue(clickQueueItem{
+		Shortlink: shortlink,
+		ClickedAt: time.Now().UTC().Unix(),
+		IP:        clientIPFromRequest(r),
+		UserAgent: strings.TrimSpace(r.UserAgent()),
+		Referer:   strings.TrimSpace(r.Referer()),
+	})
 }
 
 func (s *Server) redirectToURL(w http.ResponseWriter, r *http.Request, longURL string) {
