@@ -49,3 +49,8 @@ services:
 volumes:
   smoll-data:
   redis-data:
+
+networks:
+  nginxproxyman_network:
+    external: true
+    name: nginx-proxy-manager_nginxproxyman
