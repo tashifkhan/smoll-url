@@ -19,7 +19,8 @@ services:
       slug_length: ${slug_length:-6}
       use_wal_mode: ${use_wal_mode:-true}
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:${port:-4567}/"]
       interval: 30s
@@ -36,6 +37,12 @@ services:
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
     networks:
       - nginxproxyman_network
 
