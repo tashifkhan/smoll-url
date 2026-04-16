@@ -178,6 +178,20 @@ h1, h2, h3 { font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
 /* Forms */
 .form-group { margin-bottom: 1.5rem; }
 
+.checkbox-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  letter-spacing: 1px;
+  margin-bottom: 1.25rem;
+}
+
+.checkbox-row input {
+  width: auto;
+}
+
 .input-wrapper label {
   display: block;
   font-size: 0.7rem;
@@ -408,6 +422,11 @@ input::placeholder { color: #333; }
 
 .data-table tbody tr:hover {
   background: var(--dark-cyan);
+}
+
+.row-actions {
+  display: inline-flex;
+  justify-content: flex-end;
 }
 
 .data-table a {
