@@ -142,6 +142,7 @@
                     <th>TARGET_VECTOR</th>
                     <th class="text-right">HITS</th>
                     <th class="text-right">EXPIRY</th>
+                    <th class="text-right">ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody id="rows">
@@ -195,6 +196,31 @@
             </div>
           </form>
           <div id="edit-result" class="output-line" style="display: none;"></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ANALYTICS MODAL -->
+    <div id="analytics-modal" class="modal-overlay" style="display: none;">
+      <section class="panel modal-panel analytics-modal-panel">
+        <div class="panel-decor top-left"></div>
+        <div class="panel-decor bottom-right"></div>
+        <div class="panel-header analytics-modal-header">
+          <div class="flex-between">
+            <h2><span class="text-lime">::</span> LINK_ANALYTICS &mdash; <span id="analytics-slug-title" class="text-cyan"></span></h2>
+            <div style="display: flex; gap: 0.75rem; align-items: center;">
+              <div class="period-controls">
+                <button type="button" class="btn btn-outline period-btn" data-days="7">7D</button>
+                <button type="button" class="btn btn-outline period-btn active" data-days="30">30D</button>
+                <button type="button" class="btn btn-outline period-btn" data-days="90">90D</button>
+                <button type="button" class="btn btn-outline period-btn" data-days="0">ALL</button>
+              </div>
+              <button type="button" id="close-analytics-modal" class="btn btn-ghost btn-sm">[ CLOSE ]</button>
+            </div>
+          </div>
+        </div>
+        <div class="panel-body analytics-body" id="analytics-content">
+          <!-- JS Injected -->
         </div>
       </section>
     </div>
