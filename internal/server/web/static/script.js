@@ -248,6 +248,11 @@ createForm.addEventListener("submit", async (e) => {
     document.getElementById("longlink").value = "";
     document.getElementById("shortlink").value = "";
     await refreshTable();
+
+    setTimeout(() => {
+      setText(createResult, "");
+      setCreatedShortURL("");
+    }, 4000);
   } catch (e) {
     setText(createResult, "Error connecting to server.");
     setCreatedShortURL("");
