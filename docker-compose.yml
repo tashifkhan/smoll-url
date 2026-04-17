@@ -6,7 +6,7 @@ services:
     ports:
       - "${HOST_PORT:-8080}:${port:-4567}"
     volumes:
-      - smoll-data:/data
+      - ./data/smoll-url:/data
     env_file:
       - .env
     environment:
@@ -36,7 +36,7 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
-      - redis-data:/data
+      - ./data/redis:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -45,10 +45,6 @@ services:
       start_period: 3s
     networks:
       - nginxproxyman_network
-
-volumes:
-  smoll-data:
-  redis-data:
 
 networks:
   nginxproxyman_network:

@@ -119,6 +119,12 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
+With the current `docker-compose.yml`, these are the effective service URLs:
+
+- Browser / API from host machine: `http://localhost:${HOST_PORT:-8080}` (default: `http://localhost:8080`)
+- App service from another container on the same Compose network: `http://smoll-url:${port:-4567}` (default: `http://smoll-url:4567`)
+- Redis service from another container on the same Compose network: `redis://redis:6379/0`
+
 ### 3. Execution
 
 Run the binary:
@@ -214,7 +220,7 @@ If using NPM with Docker-network routing:
 - In NPM Proxy Host:
   - `Scheme`: `http`
   - `Forward Hostname/IP`: `smoll-url`
-  - `Forward Port`: `<port inside container>` (for example `8080`)
+  - `Forward Port`: `<port inside container>` (default `4567`, or your configured `port` value)
 - Enable WebSocket support in NPM.
 - Use Cloudflare SSL mode `Full` (or `Full (strict)` if certs are valid end-to-end).
 
@@ -269,6 +275,8 @@ curl -X POST http://localhost:8080/api/new \
     "expiry_delay": 3600
   }'
 ```
+
+If you changed `HOST_PORT` in `.env`, replace `8080` with your host port.
 
 ### Authentication
 
