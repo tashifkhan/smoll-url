@@ -6,7 +6,7 @@ services:
     ports:
       - "${HOST_PORT:-8080}:${port:-4567}"
     volumes:
-      - ./data/smoll-url:/data
+      - ${SMOLL_DATA_MOUNT:-smoll-url-data}:/data
     env_file:
       - .env
     environment:
@@ -18,9 +18,6 @@ services:
       api_key: ${api_key:-changeme}
       slug_length: ${slug_length:-6}
       use_wal_mode: ${use_wal_mode:-true}
-    depends_on:
-      redis:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:${port:-4567}/"]
       interval: 30s
@@ -34,7 +31,7 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
-      - ./data/redis:/data
+      - ${REDIS_DATA_MOUNT:-smoll-url-redis-data}:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
