@@ -79,9 +79,10 @@ type addLinkRequest struct {
 }
 
 type editLinkRequest struct {
-	Shortlink string `json:"shortlink"`
-	Longlink  string `json:"longlink"`
-	ResetHits bool   `json:"reset_hits"`
+	OriginalShortlink string `json:"original_shortlink"`
+	Shortlink         string `json:"shortlink"`
+	Longlink          string `json:"longlink"`
+	ResetHits         bool   `json:"reset_hits"`
 }
 
 func New(cfg config.Config, db *store.Store, version string) *Server {
@@ -302,7 +303,15 @@ func (s *Server) handleEditLink(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req.Shortlink = strings.TrimSpace(req.Shortlink)
+	req.OriginalShortlink = strings.TrimSpace(req.OriginalShortlink)
 	req.Longlink = strings.TrimSpace(req.Longlink)
+	if req.OriginalShortlink == "" {
+		req.OriginalShortlink = req.Shortlink
+	}
+	if req.OriginalShortlink == "" || !s.validSlugRegex.MatchString(req.OriginalShortlink) {
+		s.writeEditError(w, true, "Invalid shortlink!")
+		return
+	}
 	if req.Shortlink == "" || !s.validSlugRegex.MatchString(req.Shortlink) {
 		s.writeEditError(w, true, "Invalid shortlink!")
 		return
@@ -312,15 +321,24 @@ func (s *Server) handleEditLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = s.store.EditLink(req.Shortlink, req.Longlink, req.ResetHits)
+	err = s.store.EditLink(req.OriginalShortlink, req.Shortlink, req.Longlink, req.ResetHits)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
+			s.cache.delete(req.OriginalShortlink)
 			s.cache.delete(req.Shortlink)
 			s.writeEditError(w, true, "The shortlink was not found, and could not be edited.")
 			return
 		}
+		if errors.Is(err, store.ErrConflict) {
+			s.writeEditError(w, true, "Short URL is already in use!")
+			return
+		}
 		s.writeEditError(w, false, "Something went wrong when editing the link.")
 		return
+	}
+
+	if req.OriginalShortlink != req.Shortlink {
+		s.cache.delete(req.OriginalShortlink)
 	}
 
 	if _, _, expiryTime, err := s.store.FindURL(req.Shortlink); err == nil {

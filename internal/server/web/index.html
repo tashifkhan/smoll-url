@@ -166,11 +166,12 @@
         </div>
         <div class="panel-body">
           <form id="edit-form">
+            <input id="edit-original-shortlink" type="hidden" />
             <div class="form-group input-wrapper">
               <label for="edit-shortlink">ALIAS_TO_EDIT (SLUG)</label>
               <div class="input-row">
                 <span class="prompt-char">$&gt;</span>
-                <input id="edit-shortlink" type="text" required placeholder="existing_slug" readonly style="color: var(--text-dim);" />
+                <input id="edit-shortlink" type="text" required placeholder="existing_slug" />
               </div>
             </div>
 

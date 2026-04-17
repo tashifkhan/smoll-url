@@ -141,6 +141,7 @@ if (rows) {
       }
 
       document.getElementById("edit-shortlink").value = selected.shortlink;
+      document.getElementById("edit-original-shortlink").value = selected.shortlink;
       document.getElementById("edit-longlink").value = selected.longlink;
       document.getElementById("edit-reset-hits").checked = false;
       setText(editResult, "");
@@ -250,11 +251,12 @@ editForm.addEventListener("submit", async (e) => {
   setText(editResult, "Applying edits...");
   editResult.style.display = "block";
 
+  const originalShortlink = document.getElementById("edit-original-shortlink").value.trim();
   const shortlink = document.getElementById("edit-shortlink").value.trim();
   const longlink = document.getElementById("edit-longlink").value.trim();
   const resetHits = document.getElementById("edit-reset-hits").checked;
 
-  const payload = { shortlink, longlink, reset_hits: resetHits };
+  const payload = { original_shortlink: originalShortlink, shortlink, longlink, reset_hits: resetHits };
 
   try {
     const res = await fetch("/api/edit", {
