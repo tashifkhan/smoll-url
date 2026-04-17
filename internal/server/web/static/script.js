@@ -19,6 +19,7 @@ const copyResult = document.getElementById("copy-result");
 const copyIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
 const checkIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
 const pencilIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>`;
+const barChartIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>`;
 
 function setText(el, text) {
   el.textContent = text;
@@ -102,7 +103,7 @@ function renderTableRows(data) {
   rows.innerHTML = "";
   
   if (data.length === 0) {
-    rows.innerHTML = `<tr><td colspan="4" style="text-align:center; color: var(--text-dim); padding: 2rem;">NO_RECORDS_FOUND</td></tr>`;
+    rows.innerHTML = `<tr><td colspan="5" style="text-align:center; color: var(--text-dim); padding: 2rem;">NO_RECORDS_FOUND</td></tr>`;
     return;
   }
   
@@ -115,15 +116,18 @@ function renderTableRows(data) {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>
-        <div style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem;">
-          <a href="/${row.shortlink}" target="_blank" rel="noopener noreferrer" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px; display: inline-block; vertical-align: middle;">${displayUrl}</a>
-          <button class="btn btn-outline btn-sm copy-row-btn" data-url="${copyUrl}" type="button" style="flex-shrink: 0; padding: 0.3rem 0.4rem; display: flex; align-items: center; justify-content: center;" title="Copy to clipboard">${copyIconSvg}</button>
-          <button class="btn btn-outline btn-sm edit-row-btn" data-shortlink="${row.shortlink}" type="button" style="flex-shrink: 0; padding: 0.3rem 0.4rem; display: flex; align-items: center; justify-content: center;" title="Edit shortcut">${pencilIconSvg}</button>
-        </div>
+        <a href="/${row.shortlink}" target="_blank" rel="noopener noreferrer" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px; display: inline-block; vertical-align: middle;">${displayUrl}</a>
       </td>
       <td><a href="${row.longlink}" target="_blank" rel="noopener noreferrer" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; display: inline-block; vertical-align: middle;">${row.longlink}</a></td>
       <td class="text-right">${row.hits}</td>
       <td class="text-right">${formatExpiry(row.expiry_time)}</td>
+      <td class="text-right">
+        <div class="row-actions" style="justify-content: flex-end; gap: 0.4rem;">
+          <button class="btn btn-outline btn-sm copy-row-btn" data-url="${copyUrl}" type="button" style="padding: 0.3rem 0.4rem; display: flex; align-items: center; justify-content: center;" title="Copy to clipboard">${copyIconSvg}</button>
+          <button class="btn btn-outline btn-sm edit-row-btn" data-shortlink="${row.shortlink}" type="button" style="padding: 0.3rem 0.4rem; display: flex; align-items: center; justify-content: center;" title="Edit shortcut">${pencilIconSvg}</button>
+          <button class="btn btn-outline btn-sm analytics-row-btn" data-shortlink="${row.shortlink}" type="button" style="padding: 0.3rem 0.4rem; display: flex; align-items: center; justify-content: center;" title="View analytics">${barChartIconSvg}</button>
+        </div>
+      </td>
     `;
     rows.appendChild(tr);
   }
@@ -152,6 +156,13 @@ if (rows) {
       return;
     }
 
+    const analyticsBtn = e.target.closest(".analytics-row-btn");
+    if (analyticsBtn) {
+      const shortlink = analyticsBtn.getAttribute("data-shortlink") || "";
+      openAnalytics(shortlink);
+      return;
+    }
+
     const btn = e.target.closest(".copy-row-btn");
     if (btn) {
       const url = btn.getAttribute("data-url");
@@ -175,12 +186,12 @@ if (rows) {
 
 async function refreshTable() {
   setLoading(refreshBtn, true);
-  rows.innerHTML = `<tr class="table-loader"><td colspan="4">SYNCING_DATA_RECORDS...</td></tr>`;
+  rows.innerHTML = `<tr class="table-loader"><td colspan="5">SYNCING_DATA_RECORDS...</td></tr>`;
   
   try {
     const res = await fetch("/api/all");
     if (!res.ok) {
-      rows.innerHTML = `<tr><td colspan="4" class="text-lime">ERR_FETCHING_RECORDS</td></tr>`;
+      rows.innerHTML = `<tr><td colspan="5" class="text-lime">ERR_FETCHING_RECORDS</td></tr>`;
       setLoading(refreshBtn, false);
       return;
     }
@@ -188,7 +199,7 @@ async function refreshTable() {
     currentTableData = await res.json();
     renderTableRows(currentTableData);
   } catch(e) {
-    rows.innerHTML = `<tr><td colspan="4" class="text-lime">ERR_CONNECTION_DROPPED</td></tr>`;
+    rows.innerHTML = `<tr><td colspan="5" class="text-lime">ERR_CONNECTION_DROPPED</td></tr>`;
   }
   setLoading(refreshBtn, false);
 }
@@ -360,6 +371,169 @@ refreshBtn.addEventListener("click", async () => {
 
 // Initialize app state
 checkAuth();
+
+// ---- Analytics ----
+
+let currentAnalyticsSlug = '';
+let currentAnalyticsDays = 30;
+
+function flagEmoji(code) {
+  if (!code || code === 'Unknown') return '🌐';
+  try {
+    return [...code.toUpperCase()].map(c =>
+      String.fromCodePoint(c.charCodeAt(0) + 127397)
+    ).join('');
+  } catch (e) {
+    return '🌐';
+  }
+}
+
+function escapeHTML(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function renderBarChart(items, colorVar, labelWidth) {
+  if (!items || items.length === 0) {
+    return '<p class="no-data-msg">NO_DATA_AVAILABLE</p>';
+  }
+  const max = Math.max(...items.map(i => i.count));
+  const maxLen = labelWidth || 16;
+  return items.map(item => {
+    const pct = max > 0 ? ((item.count / max) * 100).toFixed(1) : 0;
+    const raw = String(item.label || "");
+    const label = raw.length > maxLen ? raw.slice(0, maxLen) + '…' : raw;
+    const rawEscaped = escapeHTML(raw);
+    const labelEscaped = escapeHTML(label);
+    return `<div class="stat-bar-row">
+      <span class="stat-bar-label" title="${rawEscaped}">${labelEscaped}</span>
+      <div class="stat-bar-track">
+        <div class="stat-bar-fill" style="width:${pct}%;background:var(${colorVar});color:var(${colorVar})"></div>
+      </div>
+      <span class="stat-bar-value">${item.count.toLocaleString()}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderTimeline(timeline) {
+  if (!timeline || timeline.length === 0) {
+    return '<p class="no-data-msg">NO_DATA_AVAILABLE</p>';
+  }
+  const max = Math.max(...timeline.map(t => t.count));
+  const bars = timeline.map(t => {
+    const h = max > 0 ? Math.max(2, (t.count / max) * 100) : 2;
+    return `<div class="timeline-bar-col">
+      <div class="timeline-tooltip">${t.date}<br>${t.count.toLocaleString()} click${t.count !== 1 ? 's' : ''}</div>
+      <div class="timeline-bar" style="height:${h}%"></div>
+    </div>`;
+  }).join('');
+
+  const first = timeline[0]?.date || '';
+  const mid = timeline[Math.floor(timeline.length / 2)]?.date || '';
+  const last = timeline[timeline.length - 1]?.date || '';
+
+  return `<div class="timeline-chart">${bars}</div>
+    <div class="timeline-labels"><span>${first}</span><span>${mid}</span><span>${last}</span></div>`;
+}
+
+function renderAnalyticsContent(data, days) {
+  const countryItems = data.countries.map(c => ({
+    label: `${flagEmoji(c.label)} ${c.label}`,
+    count: c.count,
+  }));
+
+  return `
+    <div class="analytics-summary">
+      <div class="summary-stat">
+        <span class="summary-label">TOTAL_CLICKS</span>
+        <span class="summary-value text-lime">${data.total_clicks.toLocaleString()}</span>
+      </div>
+      <div class="summary-stat">
+        <span class="summary-label">COUNTRIES_SEEN</span>
+        <span class="summary-value text-cyan">${data.countries.length}</span>
+      </div>
+      <div class="summary-stat">
+        <span class="summary-label">TIME_RANGE</span>
+        <span class="summary-value">${days === 0 ? 'ALL' : days + 'D'}</span>
+      </div>
+    </div>
+
+    <div class="analytics-section">
+      <h3 class="analytics-section-title">>::  CLICK_TIMELINE</h3>
+      ${renderTimeline(data.timeline)}
+    </div>
+
+    <div class="analytics-grid-2">
+      <div class="analytics-section">
+        <h3 class="analytics-section-title">>::  TOP_COUNTRIES</h3>
+        ${renderBarChart(countryItems, '--cyan-primary', 14)}
+      </div>
+      <div>
+        <div class="analytics-section">
+          <h3 class="analytics-section-title">>::  DEVICE_TYPES</h3>
+          ${renderBarChart(data.devices, '--lime-accent', 14)}
+        </div>
+        <div class="analytics-section">
+          <h3 class="analytics-section-title">>::  BROWSERS</h3>
+          ${renderBarChart(data.browsers, '--lime-accent', 14)}
+        </div>
+      </div>
+    </div>
+
+    <div class="analytics-section">
+      <h3 class="analytics-section-title">>::  TOP_REFERRERS</h3>
+      ${renderBarChart(data.referrers, '--cyan-primary', 42)}
+    </div>
+  `;
+}
+
+async function loadAnalytics() {
+  const content = document.getElementById('analytics-content');
+  content.innerHTML = '<div class="analytics-loading">FETCHING_TELEMETRY_DATA...</div>';
+  try {
+    const res = await fetch(`/api/analytics?slug=${encodeURIComponent(currentAnalyticsSlug)}&days=${currentAnalyticsDays}`);
+    if (!res.ok) throw new Error('fetch failed');
+    const data = await res.json();
+    content.innerHTML = renderAnalyticsContent(data, currentAnalyticsDays);
+  } catch (e) {
+    content.innerHTML = '<div class="analytics-error">ERR_ANALYTICS_UNAVAILABLE</div>';
+  }
+}
+
+function openAnalytics(slug) {
+  currentAnalyticsSlug = slug;
+  currentAnalyticsDays = 30;
+  document.getElementById('analytics-slug-title').textContent = slug;
+  document.querySelectorAll('.period-btn').forEach(btn => {
+    btn.classList.toggle('active', Number(btn.dataset.days) === currentAnalyticsDays);
+  });
+  document.getElementById('analytics-modal').style.display = 'flex';
+  loadAnalytics();
+}
+
+document.querySelectorAll('.period-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    currentAnalyticsDays = Number(btn.dataset.days);
+    document.querySelectorAll('.period-btn').forEach(b => {
+      b.classList.toggle('active', b === btn);
+    });
+    loadAnalytics();
+  });
+});
+
+document.getElementById('close-analytics-modal').addEventListener('click', () => {
+  document.getElementById('analytics-modal').style.display = 'none';
+});
+
+document.getElementById('analytics-modal').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('analytics-modal')) {
+    document.getElementById('analytics-modal').style.display = 'none';
+  }
+});
 
 const closeEditModalBtn = document.getElementById("close-edit-modal");
 if (closeEditModalBtn) {
