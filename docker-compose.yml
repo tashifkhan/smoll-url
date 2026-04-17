@@ -27,6 +27,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 5s
+    networks:
+      - nginxproxyman_network
 
   redis:
     image: redis:7-alpine
@@ -41,6 +43,8 @@ services:
       timeout: 3s
       retries: 5
       start_period: 3s
+    networks:
+      - nginxproxyman_network
 
 volumes:
   smoll-data:
