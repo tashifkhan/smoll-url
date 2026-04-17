@@ -12,3 +12,4 @@ config.json
 # Go
 /vendor/
 /bin/
+data/
