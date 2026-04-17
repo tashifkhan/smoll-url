@@ -178,6 +178,20 @@ h1, h2, h3 { font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
 /* Forms */
 .form-group { margin-bottom: 1.5rem; }
 
+.checkbox-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  letter-spacing: 1px;
+  margin-bottom: 1.25rem;
+}
+
+.checkbox-row input {
+  width: auto;
+}
+
 .input-wrapper label {
   display: block;
   font-size: 0.7rem;
@@ -410,6 +424,11 @@ input::placeholder { color: #333; }
   background: var(--dark-cyan);
 }
 
+.row-actions {
+  display: inline-flex;
+  justify-content: flex-end;
+}
+
 .data-table a {
   color: var(--text-main);
   text-decoration: none;
@@ -527,4 +546,23 @@ input::placeholder { color: #333; }
   .panel-header h2 { font-size: 0.85rem; }
   .input-wrapper label { font-size: 0.65rem; }
   .ascii-logo { font-size: 5px; }
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(5px);
+  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal-panel {
+  box-shadow: 0 10px 40px rgba(0,0,0,0.8), inset 0 0 0 1px rgba(255,255,255,0.05);
 }

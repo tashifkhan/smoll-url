@@ -2,11 +2,13 @@ const loginView = document.getElementById("login-view");
 const appView = document.getElementById("app-view");
 
 const createForm = document.getElementById("create-form");
+const editForm = document.getElementById("edit-form");
 const loginForm = document.getElementById("login-form");
 const refreshBtn = document.getElementById("refresh");
 const logoutBtn = document.getElementById("logout");
 
 const createResult = document.getElementById("create-result");
+const editResult = document.getElementById("edit-result");
 const sessionResult = document.getElementById("session-result");
 const rows = document.getElementById("rows");
 const createShortOutput = document.getElementById("create-short-output");
@@ -16,6 +18,7 @@ const copyResult = document.getElementById("copy-result");
 
 const copyIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
 const checkIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+const pencilIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>`;
 
 function setText(el, text) {
   el.textContent = text;
@@ -115,6 +118,7 @@ function renderTableRows(data) {
         <div style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem;">
           <a href="/${row.shortlink}" target="_blank" rel="noopener noreferrer" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px; display: inline-block; vertical-align: middle;">${displayUrl}</a>
           <button class="btn btn-outline btn-sm copy-row-btn" data-url="${copyUrl}" type="button" style="flex-shrink: 0; padding: 0.3rem 0.4rem; display: flex; align-items: center; justify-content: center;" title="Copy to clipboard">${copyIconSvg}</button>
+          <button class="btn btn-outline btn-sm edit-row-btn" data-shortlink="${row.shortlink}" type="button" style="flex-shrink: 0; padding: 0.3rem 0.4rem; display: flex; align-items: center; justify-content: center;" title="Edit shortcut">${pencilIconSvg}</button>
         </div>
       </td>
       <td><a href="${row.longlink}" target="_blank" rel="noopener noreferrer" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; display: inline-block; vertical-align: middle;">${row.longlink}</a></td>
@@ -127,6 +131,27 @@ function renderTableRows(data) {
 
 if (rows) {
   rows.addEventListener("click", async (e) => {
+    const editBtn = e.target.closest(".edit-row-btn");
+    if (editBtn) {
+      const shortlink = editBtn.getAttribute("data-shortlink") || "";
+      const selected = currentTableData.find((item) => item.shortlink === shortlink);
+      if (!selected) {
+        setText(editResult, "ERR_RECORD_NOT_FOUND");
+        return;
+      }
+
+      document.getElementById("edit-shortlink").value = selected.shortlink;
+      document.getElementById("edit-original-shortlink").value = selected.shortlink;
+      document.getElementById("edit-longlink").value = selected.longlink;
+      document.getElementById("edit-reset-hits").checked = false;
+      setText(editResult, "");
+      editResult.style.display = "none";
+      
+      document.getElementById("edit-modal").style.display = "flex";
+      setTimeout(() => document.getElementById("edit-longlink").focus(), 50);
+      return;
+    }
+
     const btn = e.target.closest(".copy-row-btn");
     if (btn) {
       const url = btn.getAttribute("data-url");
@@ -219,6 +244,50 @@ createForm.addEventListener("submit", async (e) => {
   setLoading(btn, false);
 });
 
+editForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = editForm.querySelector('button[type="submit"]');
+  setLoading(btn, true);
+  setText(editResult, "Applying edits...");
+  editResult.style.display = "block";
+
+  const originalShortlink = document.getElementById("edit-original-shortlink").value.trim();
+  const shortlink = document.getElementById("edit-shortlink").value.trim();
+  const longlink = document.getElementById("edit-longlink").value.trim();
+  const resetHits = document.getElementById("edit-reset-hits").checked;
+
+  const payload = { original_shortlink: originalShortlink, shortlink, longlink, reset_hits: resetHits };
+
+  try {
+    const res = await fetch("/api/edit", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const out = await jsonOrText(res);
+    if (!res.ok) {
+      if (typeof out === "string") {
+        setText(editResult, "Error: " + out);
+      } else {
+        setText(editResult, "Error: " + (out.reason || "Could not edit short URL"));
+      }
+      setLoading(btn, false);
+      return;
+    }
+
+    setText(editResult, "SUCCESS: LINK_UPDATED");
+    setTimeout(() => {
+      document.getElementById("edit-modal").style.display = "none";
+    }, 500);
+    await refreshTable();
+  } catch (e) {
+    setText(editResult, "Error connecting to server.");
+  }
+
+  setLoading(btn, false);
+});
+
 copyShortURLBtn.addEventListener("click", async () => {
   const targetURL = createdShortURL.textContent.trim();
   if (!targetURL) {
@@ -291,3 +360,15 @@ refreshBtn.addEventListener("click", async () => {
 
 // Initialize app state
 checkAuth();
+
+const closeEditModalBtn = document.getElementById("close-edit-modal");
+if (closeEditModalBtn) {
+  closeEditModalBtn.addEventListener("click", () => {
+    document.getElementById("edit-modal").style.display = "none";
+  });
+}
+document.getElementById("edit-modal").addEventListener("click", (e) => {
+  if (e.target === document.getElementById("edit-modal")) {
+    document.getElementById("edit-modal").style.display = "none";
+  }
+});

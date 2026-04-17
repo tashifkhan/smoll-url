@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -244,19 +245,22 @@ func (s *Store) AddHit(shortlink string) error {
 	return nil
 }
 
-func (s *Store) EditLink(shortlink, longlink string, resetHits bool) error {
+func (s *Store) EditLink(originalShortlink, shortlink, longlink string, resetHits bool) error {
 	now := time.Now().UTC().Unix()
 	query := `UPDATE urls
-		SET long_url = ?
+		SET short_url = ?, long_url = ?
 		WHERE short_url = ? AND (expiry_time = 0 OR expiry_time > ?)`
 	if resetHits {
 		query = `UPDATE urls
-			SET long_url = ?, hits = 0
+			SET short_url = ?, long_url = ?, hits = 0
 			WHERE short_url = ? AND (expiry_time = 0 OR expiry_time > ?)`
 	}
 
-	res, err := s.db.Exec(query, longlink, shortlink, now)
+	res, err := s.db.Exec(query, shortlink, longlink, originalShortlink, now)
 	if err != nil {
+		if isUniqueConstraintErr(err) {
+			return ErrConflict
+		}
 		return err
 	}
 	affected, err := res.RowsAffected()
@@ -267,6 +271,10 @@ func (s *Store) EditLink(shortlink, longlink string, resetHits bool) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+func isUniqueConstraintErr(err error) bool {
+	return strings.Contains(strings.ToLower(err.Error()), "unique constraint failed")
 }
 
 func (s *Store) DeleteLink(shortlink string) error {
