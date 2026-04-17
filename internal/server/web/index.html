@@ -122,45 +122,6 @@
             </div>
           </section>
 
-          <!-- EDIT LINK PANEL -->
-          <section class="panel">
-            <div class="panel-decor top-left"></div>
-            <div class="panel-header">
-              <h2><span class="text-lime">::</span> MODIFY_ROUTER</h2>
-            </div>
-            <div class="panel-body">
-              <form id="edit-form">
-                <div class="form-group input-wrapper">
-                  <label for="edit-shortlink">ALIAS_TO_EDIT (SLUG)</label>
-                  <div class="input-row">
-                    <span class="prompt-char">$&gt;</span>
-                    <input id="edit-shortlink" type="text" required placeholder="existing_slug" />
-                  </div>
-                </div>
-
-                <div class="form-group input-wrapper">
-                  <label for="edit-longlink">NEW_TARGET_VECTOR (URL)</label>
-                  <div class="input-row">
-                    <span class="prompt-char">$&gt;</span>
-                    <input id="edit-longlink" type="url" required placeholder="https://..." />
-                  </div>
-                </div>
-
-                <label class="checkbox-row" for="edit-reset-hits">
-                  <input id="edit-reset-hits" type="checkbox" />
-                  <span>RESET_HITS_COUNTER</span>
-                </label>
-
-                <div class="form-actions align-right">
-                  <button type="submit" class="btn btn-outline">
-                    <span class="btn-text">APPLY_PATCH</span>
-                  </button>
-                </div>
-              </form>
-              <div id="edit-result" class="output-line"></div>
-            </div>
-          </section>
-        </div>
 
         <!-- TABLE PANEL -->
         <section class="panel table-panel">
@@ -181,7 +142,6 @@
                     <th>TARGET_VECTOR</th>
                     <th class="text-right">HITS</th>
                     <th class="text-right">EXPIRY</th>
-                    <th class="text-right">ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody id="rows">
@@ -193,6 +153,50 @@
         </section>
       </div>
     </main>
+
+
+    <!-- EDIT LINK MODAL -->
+    <div id="edit-modal" class="modal-overlay" style="display: none;">
+      <section class="panel modal-panel" style="width: 100%; max-width: 500px; margin: 1rem;">
+        <div class="panel-decor top-left"></div>
+        <div class="panel-decor bottom-right"></div>
+        <div class="panel-header flex-between">
+          <h2><span class="text-lime">::</span> MODIFY_ROUTER</h2>
+          <button type="button" id="close-edit-modal" class="btn btn-ghost btn-sm">[ CLOSE ]</button>
+        </div>
+        <div class="panel-body">
+          <form id="edit-form">
+            <div class="form-group input-wrapper">
+              <label for="edit-shortlink">ALIAS_TO_EDIT (SLUG)</label>
+              <div class="input-row">
+                <span class="prompt-char">$&gt;</span>
+                <input id="edit-shortlink" type="text" required placeholder="existing_slug" readonly style="color: var(--text-dim);" />
+              </div>
+            </div>
+
+            <div class="form-group input-wrapper">
+              <label for="edit-longlink">NEW_TARGET_VECTOR (URL)</label>
+              <div class="input-row">
+                <span class="prompt-char">$&gt;</span>
+                <input id="edit-longlink" type="url" required placeholder="https://..." />
+              </div>
+            </div>
+
+            <label class="checkbox-row" for="edit-reset-hits">
+              <input id="edit-reset-hits" type="checkbox" />
+              <span>RESET_HITS_COUNTER</span>
+            </label>
+
+            <div class="form-actions align-right">
+              <button type="submit" class="btn btn-outline w-full">
+                <span class="btn-text">APPLY_PATCH</span>
+              </button>
+            </div>
+          </form>
+          <div id="edit-result" class="output-line" style="display: none;"></div>
+        </div>
+      </section>
+    </div>
 
     <script src="/static/script.js" defer></script>
   </body>

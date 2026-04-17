@@ -18,6 +18,7 @@ const copyResult = document.getElementById("copy-result");
 
 const copyIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
 const checkIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+const pencilIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>`;
 
 function setText(el, text) {
   el.textContent = text;
@@ -101,7 +102,7 @@ function renderTableRows(data) {
   rows.innerHTML = "";
   
   if (data.length === 0) {
-    rows.innerHTML = `<tr><td colspan="5" style="text-align:center; color: var(--text-dim); padding: 2rem;">NO_RECORDS_FOUND</td></tr>`;
+    rows.innerHTML = `<tr><td colspan="4" style="text-align:center; color: var(--text-dim); padding: 2rem;">NO_RECORDS_FOUND</td></tr>`;
     return;
   }
   
@@ -117,16 +118,12 @@ function renderTableRows(data) {
         <div style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem;">
           <a href="/${row.shortlink}" target="_blank" rel="noopener noreferrer" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px; display: inline-block; vertical-align: middle;">${displayUrl}</a>
           <button class="btn btn-outline btn-sm copy-row-btn" data-url="${copyUrl}" type="button" style="flex-shrink: 0; padding: 0.3rem 0.4rem; display: flex; align-items: center; justify-content: center;" title="Copy to clipboard">${copyIconSvg}</button>
+          <button class="btn btn-outline btn-sm edit-row-btn" data-shortlink="${row.shortlink}" type="button" style="flex-shrink: 0; padding: 0.3rem 0.4rem; display: flex; align-items: center; justify-content: center;" title="Edit shortcut">${pencilIconSvg}</button>
         </div>
       </td>
       <td><a href="${row.longlink}" target="_blank" rel="noopener noreferrer" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; display: inline-block; vertical-align: middle;">${row.longlink}</a></td>
       <td class="text-right">${row.hits}</td>
       <td class="text-right">${formatExpiry(row.expiry_time)}</td>
-      <td class="text-right">
-        <div class="row-actions">
-          <button class="btn btn-outline btn-sm edit-row-btn" data-shortlink="${row.shortlink}" type="button">[ EDIT ]</button>
-        </div>
-      </td>
     `;
     rows.appendChild(tr);
   }
@@ -146,9 +143,11 @@ if (rows) {
       document.getElementById("edit-shortlink").value = selected.shortlink;
       document.getElementById("edit-longlink").value = selected.longlink;
       document.getElementById("edit-reset-hits").checked = false;
-      setText(editResult, `READY_TO_EDIT: ${selected.shortlink}`);
-      document.getElementById("edit-longlink").focus();
-      document.getElementById("edit-form").scrollIntoView({ behavior: "smooth", block: "center" });
+      setText(editResult, "");
+      editResult.style.display = "none";
+      
+      document.getElementById("edit-modal").style.display = "flex";
+      setTimeout(() => document.getElementById("edit-longlink").focus(), 50);
       return;
     }
 
@@ -175,12 +174,12 @@ if (rows) {
 
 async function refreshTable() {
   setLoading(refreshBtn, true);
-  rows.innerHTML = `<tr class="table-loader"><td colspan="5">SYNCING_DATA_RECORDS...</td></tr>`;
+  rows.innerHTML = `<tr class="table-loader"><td colspan="4">SYNCING_DATA_RECORDS...</td></tr>`;
   
   try {
     const res = await fetch("/api/all");
     if (!res.ok) {
-      rows.innerHTML = `<tr><td colspan="5" class="text-lime">ERR_FETCHING_RECORDS</td></tr>`;
+      rows.innerHTML = `<tr><td colspan="4" class="text-lime">ERR_FETCHING_RECORDS</td></tr>`;
       setLoading(refreshBtn, false);
       return;
     }
@@ -188,7 +187,7 @@ async function refreshTable() {
     currentTableData = await res.json();
     renderTableRows(currentTableData);
   } catch(e) {
-    rows.innerHTML = `<tr><td colspan="5" class="text-lime">ERR_CONNECTION_DROPPED</td></tr>`;
+    rows.innerHTML = `<tr><td colspan="4" class="text-lime">ERR_CONNECTION_DROPPED</td></tr>`;
   }
   setLoading(refreshBtn, false);
 }
@@ -249,6 +248,7 @@ editForm.addEventListener("submit", async (e) => {
   const btn = editForm.querySelector('button[type="submit"]');
   setLoading(btn, true);
   setText(editResult, "Applying edits...");
+  editResult.style.display = "block";
 
   const shortlink = document.getElementById("edit-shortlink").value.trim();
   const longlink = document.getElementById("edit-longlink").value.trim();
@@ -275,6 +275,9 @@ editForm.addEventListener("submit", async (e) => {
     }
 
     setText(editResult, "SUCCESS: LINK_UPDATED");
+    setTimeout(() => {
+      document.getElementById("edit-modal").style.display = "none";
+    }, 500);
     await refreshTable();
   } catch (e) {
     setText(editResult, "Error connecting to server.");
@@ -355,3 +358,15 @@ refreshBtn.addEventListener("click", async () => {
 
 // Initialize app state
 checkAuth();
+
+const closeEditModalBtn = document.getElementById("close-edit-modal");
+if (closeEditModalBtn) {
+  closeEditModalBtn.addEventListener("click", () => {
+    document.getElementById("edit-modal").style.display = "none";
+  });
+}
+document.getElementById("edit-modal").addEventListener("click", (e) => {
+  if (e.target === document.getElementById("edit-modal")) {
+    document.getElementById("edit-modal").style.display = "none";
+  }
+});
