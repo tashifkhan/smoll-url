@@ -1,6 +1,8 @@
 package server
 
 import (
+	"container/list"
+	"encoding/json"
 	"net"
 	"net/http"
 	"strings"
@@ -14,6 +16,16 @@ import (
 	"smoll-url/internal/config"
 	"smoll-url/internal/store"
 )
+
+type geoCacheEntry struct {
+	countryCode string
+	cityName    string
+}
+
+type geoCacheItem struct {
+	key   string
+	value geoCacheEntry
+}
 
 type clickQueueItem struct {
 	Shortlink string
@@ -29,12 +41,19 @@ type clickTracker struct {
 	batchSize     int
 	flushInterval time.Duration
 	geoDB         *maxminddb.Reader
+	httpClient    *http.Client
+
+	geoMu    sync.RWMutex
+	geoCache map[string]*list.Element
+	geoList  *list.List
 
 	stopCh    chan struct{}
 	doneCh    chan struct{}
 	closeOnce sync.Once
 	closeErr  error
 }
+
+const maxGeoCacheEntries = 10000
 
 type maxMindCityRecord struct {
 	Country struct {
@@ -66,6 +85,9 @@ func newClickTracker(cfg config.Config, st *store.Store) *clickTracker {
 		batchSize:     cfg.ClickBatchSize,
 		flushInterval: time.Duration(cfg.ClickFlushIntervalMS) * time.Millisecond,
 		geoDB:         geoDB,
+		httpClient:    &http.Client{Timeout: 3 * time.Second},
+		geoCache:      make(map[string]*list.Element),
+		geoList:       list.New(),
 		stopCh:        make(chan struct{}),
 		doneCh:        make(chan struct{}),
 	}
@@ -164,7 +186,7 @@ func (t *clickTracker) flush(batch []clickQueueItem) error {
 }
 
 func (t *clickTracker) lookupGeo(ipAddress string) (string, string) {
-	if t == nil || t.geoDB == nil || ipAddress == "" {
+	if t == nil || ipAddress == "" {
 		return "", ""
 	}
 
@@ -173,14 +195,81 @@ func (t *clickTracker) lookupGeo(ipAddress string) (string, string) {
 		return "", ""
 	}
 
-	var rec maxMindCityRecord
-	if err := t.geoDB.Lookup(ip, &rec); err != nil {
+	// Skip private / loopback addresses — no point in looking them up.
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
 		return "", ""
 	}
 
-	countryCode := strings.ToUpper(strings.TrimSpace(rec.Country.ISOCode))
-	cityName := strings.TrimSpace(rec.City.Names["en"])
+	// Check in-memory cache first.
+	t.geoMu.Lock()
+	if elem, ok := t.geoCache[ipAddress]; ok {
+		t.geoList.MoveToFront(elem)
+		entry := elem.Value.(*geoCacheItem).value
+		t.geoMu.Unlock()
+		return entry.countryCode, entry.cityName
+	}
+	t.geoMu.Unlock()
+
+	var countryCode, cityName string
+
+	if t.geoDB != nil {
+		// Fast path: local MaxMind DB.
+		var rec maxMindCityRecord
+		if err := t.geoDB.Lookup(ip, &rec); err == nil {
+			countryCode = strings.ToUpper(strings.TrimSpace(rec.Country.ISOCode))
+			cityName = strings.TrimSpace(rec.City.Names["en"])
+		}
+	} else {
+		// Fallback: ip-api.com (free, no key required).
+		countryCode, cityName = t.lookupGeoHTTP(ipAddress)
+	}
+
+	// Store in cache regardless of outcome (avoids hammering the API on misses too).
+	t.geoMu.Lock()
+	if elem, ok := t.geoCache[ipAddress]; ok {
+		elem.Value.(*geoCacheItem).value = geoCacheEntry{countryCode: countryCode, cityName: cityName}
+		t.geoList.MoveToFront(elem)
+	} else {
+		elem := t.geoList.PushFront(&geoCacheItem{
+			key:   ipAddress,
+			value: geoCacheEntry{countryCode: countryCode, cityName: cityName},
+		})
+		t.geoCache[ipAddress] = elem
+		if t.geoList.Len() > maxGeoCacheEntries {
+			last := t.geoList.Back()
+			if last != nil {
+				item := last.Value.(*geoCacheItem)
+				delete(t.geoCache, item.key)
+				t.geoList.Remove(last)
+			}
+		}
+	}
+	t.geoMu.Unlock()
+
 	return countryCode, cityName
+}
+
+func (t *clickTracker) lookupGeoHTTP(ipAddress string) (string, string) {
+	resp, err := t.httpClient.Get("http://ip-api.com/json/" + ipAddress + "?fields=countryCode,city")
+	if err != nil {
+		log.Printf("geo HTTP lookup failed for %s: %v", ipAddress, err)
+		return "", ""
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", ""
+	}
+
+	var result struct {
+		CountryCode string `json:"countryCode"`
+		City        string `json:"city"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", ""
+	}
+
+	return strings.ToUpper(strings.TrimSpace(result.CountryCode)), strings.TrimSpace(result.City)
 }
 
 func clientIPFromRequest(r *http.Request) string {

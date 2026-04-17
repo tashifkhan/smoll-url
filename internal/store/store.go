@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -377,6 +378,269 @@ func (s *Store) Cleanup() error {
 	}
 
 	return nil
+}
+
+// ---- Analytics Types ----
+
+type CountStat struct {
+	Label string `json:"label"`
+	Count int64  `json:"count"`
+}
+
+type TimelineStat struct {
+	Date  string `json:"date"`
+	Count int64  `json:"count"`
+}
+
+type ClickAnalytics struct {
+	Slug        string         `json:"slug"`
+	TotalClicks int64          `json:"total_clicks"`
+	Countries   []CountStat    `json:"countries"`
+	Devices     []CountStat    `json:"devices"`
+	Browsers    []CountStat    `json:"browsers"`
+	Referrers   []CountStat    `json:"referrers"`
+	Timeline    []TimelineStat `json:"timeline"`
+}
+
+func (s *Store) GetClickAnalytics(shortlink string, days int) (*ClickAnalytics, error) {
+	var since int64
+	if days > 0 {
+		since = time.Now().UTC().AddDate(0, 0, -days).Unix()
+	}
+
+	result := &ClickAnalytics{
+		Slug:      shortlink,
+		Countries: []CountStat{},
+		Devices:   []CountStat{},
+		Browsers:  []CountStat{},
+		Referrers: []CountStat{},
+		Timeline:  []TimelineStat{},
+	}
+
+	// Total clicks
+	if err := s.db.QueryRow(
+		`SELECT COUNT(*) FROM click_events WHERE short_url = ? AND clicked_at >= ?`,
+		shortlink, since,
+	).Scan(&result.TotalClicks); err != nil {
+		return nil, err
+	}
+
+	// Top countries
+	{
+		rows, err := s.db.Query(
+			`SELECT COALESCE(NULLIF(country_code,''),'Unknown') as cc, COUNT(*) as cnt
+			 FROM click_events WHERE short_url = ? AND clicked_at >= ?
+			 GROUP BY cc ORDER BY cnt DESC LIMIT 10`,
+			shortlink, since,
+		)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var stat CountStat
+			if err := rows.Scan(&stat.Label, &stat.Count); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			result.Countries = append(result.Countries, stat)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+	}
+
+	// Referrers (domain-extracted)
+	{
+		rows, err := s.db.Query(
+			`SELECT COALESCE(NULLIF(referer,''),'direct') as ref, COUNT(*) as cnt
+			 FROM click_events WHERE short_url = ? AND clicked_at >= ?
+			 GROUP BY referer ORDER BY cnt DESC LIMIT 20`,
+			shortlink, since,
+		)
+		if err != nil {
+			return nil, err
+		}
+		refMap := make(map[string]int64)
+		for rows.Next() {
+			var ref string
+			var cnt int64
+			if err := rows.Scan(&ref, &cnt); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			refMap[extractRefDomain(ref)] += cnt
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		for label, count := range refMap {
+			result.Referrers = append(result.Referrers, CountStat{Label: label, Count: count})
+		}
+		sort.Slice(result.Referrers, func(i, j int) bool {
+			return result.Referrers[i].Count > result.Referrers[j].Count
+		})
+		if len(result.Referrers) > 10 {
+			result.Referrers = result.Referrers[:10]
+		}
+	}
+
+	// Device + browser classification from user agents
+	{
+		rows, err := s.db.Query(
+			`SELECT user_agent FROM click_events WHERE short_url = ? AND clicked_at >= ?`,
+			shortlink, since,
+		)
+		if err != nil {
+			return nil, err
+		}
+		deviceCounts := make(map[string]int64)
+		browserCounts := make(map[string]int64)
+		for rows.Next() {
+			var ua string
+			if err := rows.Scan(&ua); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			deviceCounts[classifyDevice(ua)]++
+			browserCounts[classifyBrowser(ua)]++
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		for label, count := range deviceCounts {
+			result.Devices = append(result.Devices, CountStat{Label: label, Count: count})
+		}
+		sort.Slice(result.Devices, func(i, j int) bool {
+			return result.Devices[i].Count > result.Devices[j].Count
+		})
+		for label, count := range browserCounts {
+			result.Browsers = append(result.Browsers, CountStat{Label: label, Count: count})
+		}
+		sort.Slice(result.Browsers, func(i, j int) bool {
+			return result.Browsers[i].Count > result.Browsers[j].Count
+		})
+	}
+
+	// Click timeline — fill all days in range (including zero-click days)
+	{
+		nowUTC := time.Now().UTC()
+		sinceTime := time.Unix(since, 0).UTC()
+		if days > 0 {
+			sinceTime = nowUTC.AddDate(0, 0, -days)
+		}
+		sinceDay := time.Date(sinceTime.Year(), sinceTime.Month(), sinceTime.Day(), 0, 0, 0, 0, time.UTC)
+		today := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
+
+		rows, err := s.db.Query(
+			`SELECT strftime('%Y-%m-%d', datetime(clicked_at, 'unixepoch')) as day, COUNT(*) as cnt
+			 FROM click_events WHERE short_url = ? AND clicked_at >= ?
+			 GROUP BY day ORDER BY day ASC`,
+			shortlink, since,
+		)
+		if err != nil {
+			return nil, err
+		}
+		dayMap := make(map[string]int64)
+		var firstDay string
+		for rows.Next() {
+			var stat TimelineStat
+			if err := rows.Scan(&stat.Date, &stat.Count); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			dayMap[stat.Date] = stat.Count
+			if firstDay == "" {
+				firstDay = stat.Date
+			}
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+
+		var start time.Time
+		if days > 0 {
+			start = sinceDay
+		} else if firstDay != "" {
+			start, _ = time.Parse("2006-01-02", firstDay)
+		} else {
+			start = today
+		}
+
+		start = time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, time.UTC)
+		for d := start; !d.After(today); d = d.AddDate(0, 0, 1) {
+			key := d.Format("2006-01-02")
+			result.Timeline = append(result.Timeline, TimelineStat{Date: key, Count: dayMap[key]})
+		}
+	}
+
+	return result, nil
+}
+
+func extractRefDomain(ref string) string {
+	if ref == "direct" || ref == "" {
+		return "Direct"
+	}
+	if idx := strings.Index(ref, "://"); idx >= 0 {
+		rest := ref[idx+3:]
+		if i := strings.IndexByte(rest, '/'); i >= 0 {
+			rest = rest[:i]
+		}
+		if i := strings.IndexByte(rest, '?'); i >= 0 {
+			rest = rest[:i]
+		}
+		return rest
+	}
+	if len(ref) > 50 {
+		return ref[:50] + "..."
+	}
+	return ref
+}
+
+func classifyDevice(ua string) string {
+	if ua == "" {
+		return "Unknown"
+	}
+	uaL := strings.ToLower(ua)
+	if strings.Contains(uaL, "ipad") || (strings.Contains(uaL, "android") && !strings.Contains(uaL, "mobile")) {
+		return "Tablet"
+	}
+	if strings.Contains(uaL, "mobile") || strings.Contains(uaL, "iphone") || strings.Contains(uaL, "ipod") {
+		return "Mobile"
+	}
+	return "Desktop"
+}
+
+func classifyBrowser(ua string) string {
+	if ua == "" {
+		return "Unknown"
+	}
+	uaL := strings.ToLower(ua)
+	switch {
+	case strings.Contains(uaL, "edg/") || strings.Contains(uaL, "edge/"):
+		return "Edge"
+	case strings.Contains(uaL, "opr/") || strings.Contains(uaL, "opera"):
+		return "Opera"
+	case strings.Contains(uaL, "chrome") || strings.Contains(uaL, "crios") || strings.Contains(uaL, "chromium"):
+		return "Chrome"
+	case strings.Contains(uaL, "firefox") || strings.Contains(uaL, "fxios"):
+		return "Firefox"
+	case strings.Contains(uaL, "safari"):
+		return "Safari"
+	case strings.Contains(uaL, "curl"):
+		return "cURL"
+	case strings.Contains(uaL, "wget"):
+		return "Wget"
+	case strings.Contains(uaL, "python"):
+		return "Python"
+	case strings.Contains(uaL, "go-http"):
+		return "Go HTTP"
+	default:
+		return "Other"
+	}
 }
 
 func (s *Store) RecordClickEvents(events []ClickEvent) error {

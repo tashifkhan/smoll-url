@@ -124,6 +124,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/login", s.handleLogin)
 	mux.HandleFunc("/api/logout", s.handleLogout)
 	mux.HandleFunc("/api/del/", s.handleDeleteLink)
+	mux.HandleFunc("/api/analytics", s.handleAnalytics)
 
 	if !s.cfg.DisableFrontend {
 		if s.cfg.CustomLandingDirectory == "" {
@@ -492,6 +493,45 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	})
 
 	writeText(w, http.StatusOK, "Logged out!")
+}
+
+func (s *Server) handleAnalytics(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeMethodNotAllowed(w)
+		return
+	}
+
+	apiResult := auth.IsAPIAuthorized(r, s.cfg)
+	if !apiResult.Success && !s.isSessionValid(r) {
+		writeJSON(w, http.StatusUnauthorized, apiResult)
+		return
+	}
+
+	shortlink := strings.TrimSpace(r.URL.Query().Get("slug"))
+	if shortlink == "" || !s.validSlugRegex.MatchString(shortlink) {
+		writeJSON(w, http.StatusBadRequest, JSONResponse{Success: false, Error: true, Reason: "Invalid slug!"})
+		return
+	}
+
+	days := 30
+	if d := r.URL.Query().Get("days"); d != "" {
+		if n, err := strconv.Atoi(d); err == nil && n >= 0 && n <= 365 {
+			days = n
+		}
+	}
+
+	if s.store == nil {
+		writeJSON(w, http.StatusServiceUnavailable, JSONResponse{Success: false, Error: true, Reason: "Analytics not available"})
+		return
+	}
+
+	analytics, err := s.store.GetClickAnalytics(shortlink, days)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, JSONResponse{Success: false, Error: true, Reason: "Failed to fetch analytics"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, analytics)
 }
 
 func (s *Server) handleDeleteLink(w http.ResponseWriter, r *http.Request) {
