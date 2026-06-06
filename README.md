@@ -95,6 +95,13 @@ The app loads `.env` from the current directory by default. You can point to a d
 | `cache_control_header` | _(empty)_ | Optional `Cache-Control` response header value. |
 | `custom_landing_directory` | _(empty)_ | Serve files from a custom landing directory. |
 | `frontend_page_size` | `10` | Default page size for frontend list pagination APIs. |
+| `posthog_key` | _(empty)_ | Optional PostHog project API key. When set, the embedded frontend loads PostHog through the local `/ph` proxy. |
+| `posthog_project_id` | _(empty)_ | Optional PostHog project ID used by the admin PostHog analytics dashboard. |
+| `posthog_personal_api_key` | _(empty)_ | Optional PostHog personal API key used server-side to query aggregate analytics. |
+| `posthog_base_url` | `https://eu.posthog.com` | PostHog app/API base URL for HogQL aggregate analytics queries. |
+| `posthog_api_host` | `https://eu.i.posthog.com` | PostHog ingestion host proxied from `/ph/*`. |
+| `posthog_assets_host` | `https://eu-assets.i.posthog.com` | PostHog asset host proxied from `/ph/static/*`. |
+| `posthog_ui_host` | `https://eu.posthog.com` | PostHog UI host passed to the browser SDK. |
 | `env_file` | `.env` | Path to env file loaded at startup. |
 
 Notes:

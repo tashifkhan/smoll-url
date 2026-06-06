@@ -1,6 +1,35 @@
 const loginView = document.getElementById("login-view");
 const appView = document.getElementById("app-view");
 
+async function initPostHog() {
+  try {
+    const res = await fetch("/api/posthog");
+    if (!res.ok) return;
+
+    const cfg = await res.json();
+    if (cfg.analytics_enabled) {
+      initPostHogDashboard();
+    }
+    if (!cfg.key) return;
+
+    const script = document.createElement("script");
+    script.async = true;
+    script.src = "/ph/static/array.js";
+    script.onload = () => {
+      if (!window.posthog) return;
+      window.posthog.init(cfg.key, {
+        api_host: "/ph",
+        ui_host: cfg.ui_host || "https://eu.posthog.com",
+      });
+    };
+    document.head.appendChild(script);
+  } catch (e) {
+    // Analytics must never block the admin UI.
+  }
+}
+
+initPostHog();
+
 const createForm = document.getElementById("create-form");
 const editForm = document.getElementById("edit-form");
 const loginForm = document.getElementById("login-form");
