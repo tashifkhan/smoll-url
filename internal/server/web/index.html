@@ -152,6 +152,22 @@
             </div>
           </div>
         </section>
+
+        <section class="panel" id="posthog-panel" style="display: none;">
+          <div class="panel-decor top-right"></div>
+          <div class="panel-header flex-between">
+            <h2><span class="text-lime">::</span> POSTHOG_ANALYTICS</h2>
+            <div class="period-controls">
+              <button type="button" class="btn btn-outline ph-period-btn active" data-days="7">7D</button>
+              <button type="button" class="btn btn-outline ph-period-btn" data-days="30">30D</button>
+              <button type="button" class="btn btn-outline ph-period-btn" data-days="90">90D</button>
+              <button type="button" class="btn btn-outline ph-period-btn" data-days="0">ALL</button>
+            </div>
+          </div>
+          <div class="panel-body analytics-body" id="posthog-content">
+            <div class="analytics-loading">WAITING_FOR_POSTHOG_CONFIG...</div>
+          </div>
+        </section>
       </div>
     </main>
 
