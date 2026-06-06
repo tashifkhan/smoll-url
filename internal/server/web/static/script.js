@@ -101,6 +101,9 @@ async function checkAuth() {
       appView.style.display = "block";
       logoutBtn.style.display = role === "admin" ? "inline-block" : "none";
       await refreshTable();
+      if (role === "admin" && document.getElementById('posthog-panel')?.style.display !== 'none') {
+        await loadPostHogDashboard();
+      }
     } else {
       loginView.style.display = "block";
       appView.style.display = "none";
@@ -523,6 +526,115 @@ function renderAnalyticsContent(data, days) {
       ${renderBarChart(data.referrers, '--cyan-primary', 42)}
     </div>
   `;
+}
+
+let currentPostHogDays = 7;
+
+function postHogEntries(entries, labelTransform) {
+  return (entries || []).map(item => ({
+    label: labelTransform ? labelTransform(item.key || 'Unknown') : (item.key || 'Unknown'),
+    count: item.pageviews || 0,
+  }));
+}
+
+function renderPostHogContent(data, days) {
+  const totals = (data.timeseries || []).reduce((acc, item) => {
+    acc.pageviews += item.pageviews || 0;
+    acc.visitors += item.visitors || 0;
+    return acc;
+  }, { pageviews: 0, visitors: 0 });
+
+  const timeline = (data.timeseries || []).map(item => ({
+    date: String(item.date || '').slice(0, 10),
+    count: item.pageviews || 0,
+  }));
+
+  const stats = data.stats || {};
+  const countries = postHogEntries(stats.country, code => `${flagEmoji(code)} ${code}`);
+
+  return `
+    <div class="analytics-summary">
+      <div class="summary-stat">
+        <span class="summary-label">PAGEVIEWS</span>
+        <span class="summary-value text-lime">${totals.pageviews.toLocaleString()}</span>
+      </div>
+      <div class="summary-stat">
+        <span class="summary-label">VISITORS</span>
+        <span class="summary-value text-cyan">${totals.visitors.toLocaleString()}</span>
+      </div>
+      <div class="summary-stat">
+        <span class="summary-label">TIME_RANGE</span>
+        <span class="summary-value">${days === 0 ? 'ALL' : days + 'D'}</span>
+      </div>
+    </div>
+
+    <div class="analytics-section">
+      <h3 class="analytics-section-title">>::  PAGEVIEW_TIMELINE</h3>
+      ${renderTimeline(timeline)}
+    </div>
+
+    <div class="analytics-grid-2">
+      <div class="analytics-section">
+        <h3 class="analytics-section-title">>::  TOP_PATHS</h3>
+        ${renderBarChart(postHogEntries(stats.path), '--lime-accent', 28)}
+      </div>
+      <div class="analytics-section">
+        <h3 class="analytics-section-title">>::  TOP_REFERRERS</h3>
+        ${renderBarChart(postHogEntries(stats.referrer), '--cyan-primary', 28)}
+      </div>
+    </div>
+
+    <div class="analytics-grid-2">
+      <div class="analytics-section">
+        <h3 class="analytics-section-title">>::  COUNTRIES</h3>
+        ${renderBarChart(countries, '--cyan-primary', 14)}
+      </div>
+      <div>
+        <div class="analytics-section">
+          <h3 class="analytics-section-title">>::  DEVICE_TYPES</h3>
+          ${renderBarChart(postHogEntries(stats.device_type), '--lime-accent', 14)}
+        </div>
+        <div class="analytics-section">
+          <h3 class="analytics-section-title">>::  OPERATING_SYSTEMS</h3>
+          ${renderBarChart(postHogEntries(stats.os_name), '--lime-accent', 14)}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function loadPostHogDashboard() {
+  const content = document.getElementById('posthog-content');
+  if (!content) return;
+  content.innerHTML = '<div class="analytics-loading">FETCHING_POSTHOG_DATA...</div>';
+
+  try {
+    const res = await fetch(`/api/posthog/analytics?days=${currentPostHogDays}`);
+    if (!res.ok) throw new Error('fetch failed');
+    const data = await res.json();
+    content.innerHTML = renderPostHogContent(data, currentPostHogDays);
+  } catch (e) {
+    content.innerHTML = '<div class="analytics-error">ERR_POSTHOG_ANALYTICS_UNAVAILABLE</div>';
+  }
+}
+
+function initPostHogDashboard() {
+  const panel = document.getElementById('posthog-panel');
+  if (!panel) return;
+
+  panel.style.display = 'block';
+  document.querySelectorAll('.ph-period-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentPostHogDays = Number(btn.dataset.days);
+      document.querySelectorAll('.ph-period-btn').forEach(b => {
+        b.classList.toggle('active', b === btn);
+      });
+      loadPostHogDashboard();
+    });
+  });
+  if (appView.style.display !== 'none' && logoutBtn.style.display !== 'none') {
+    loadPostHogDashboard();
+  }
 }
 
 async function loadAnalytics() {
