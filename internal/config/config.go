@@ -36,6 +36,13 @@ type Config struct {
 	UseWALMode             bool
 	EnsureACID             bool
 	FrontendPageSize       int
+	PostHogKey             string
+	PostHogProjectID       string
+	PostHogPersonalAPIKey  string
+	PostHogBaseURL         string
+	PostHogAPIHost         string
+	PostHogAssetsHost      string
+	PostHogUIHost          string
 }
 
 func Load() Config {
@@ -70,6 +77,13 @@ func Load() Config {
 		UseWALMode:             envBool("use_wal_mode", false),
 		EnsureACID:             envBool("ensure_acid", true),
 		FrontendPageSize:       maxInt(envInt("frontend_page_size", 10), 1),
+		PostHogKey:             strings.TrimSpace(os.Getenv("posthog_key")),
+		PostHogProjectID:       strings.TrimSpace(os.Getenv("posthog_project_id")),
+		PostHogPersonalAPIKey:  strings.TrimSpace(os.Getenv("posthog_personal_api_key")),
+		PostHogBaseURL:         normalizeSiteURL(envString("posthog_base_url", "https://eu.posthog.com")),
+		PostHogAPIHost:         normalizeSiteURL(envString("posthog_api_host", "https://eu.i.posthog.com")),
+		PostHogAssetsHost:      normalizeSiteURL(envString("posthog_assets_host", "https://eu-assets.i.posthog.com")),
+		PostHogUIHost:          normalizeSiteURL(envString("posthog_ui_host", "https://eu.posthog.com")),
 	}
 
 	if envHas("redirect_method") {
@@ -101,6 +115,9 @@ func Load() Config {
 		log.Printf("redirect mode: temporary (307)")
 	} else {
 		log.Printf("redirect mode: permanent (308)")
+	}
+	if cfg.PostHogKey != "" {
+		log.Printf("posthog analytics enabled")
 	}
 
 	return cfg
