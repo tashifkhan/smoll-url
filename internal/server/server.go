@@ -60,6 +60,12 @@ type LinkInfo struct {
 	ExpiryTime int64  `json:"expiry_time"`
 }
 
+type PublicURL struct {
+	Shortlink  string `json:"shortlink"`
+	Longlink   string `json:"longlink"`
+	ExpiryTime int64  `json:"expiry_time"`
+}
+
 type backendConfig struct {
 	Version               string `json:"version"`
 	SiteURL               string `json:"site_url,omitempty"`
@@ -115,6 +121,7 @@ func (s *Server) Routes() http.Handler {
 
 	mux.HandleFunc("/api/new", s.handleAddLink)
 	mux.HandleFunc("/api/all", s.handleGetAll)
+	mux.HandleFunc("/api/public/urls", s.handlePublicURLs)
 	mux.HandleFunc("/api/expand", s.handleExpand)
 	mux.HandleFunc("/api/edit", s.handleEditLink)
 	mux.HandleFunc("/api/getconfig", s.handleGetConfig)
@@ -245,6 +252,30 @@ func (s *Server) handleGetAll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, rows)
+}
+
+func (s *Server) handlePublicURLs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeMethodNotAllowed(w)
+		return
+	}
+
+	rows, err := s.store.GetAll("", 0, 0)
+	if err != nil {
+		writeText(w, http.StatusInternalServerError, "[]")
+		return
+	}
+
+	urls := make([]PublicURL, 0, len(rows))
+	for _, row := range rows {
+		urls = append(urls, PublicURL{
+			Shortlink:  row.Shortlink,
+			Longlink:   row.Longlink,
+			ExpiryTime: row.ExpiryTime,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, urls)
 }
 
 func (s *Server) handleExpand(w http.ResponseWriter, r *http.Request) {
