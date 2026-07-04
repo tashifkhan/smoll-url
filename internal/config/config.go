@@ -33,6 +33,7 @@ type Config struct {
 	TryLongerSlug          bool
 	AllowCapitalLetters    bool
 	CustomLandingDirectory string
+	NotFoundRedirect       string
 	UseWALMode             bool
 	EnsureACID             bool
 	FrontendPageSize       int
@@ -74,6 +75,7 @@ func Load() Config {
 		TryLongerSlug:          envBool("try_longer_slug", false),
 		AllowCapitalLetters:    envBool("allow_capital_letters", false),
 		CustomLandingDirectory: strings.TrimSpace(os.Getenv("custom_landing_directory")),
+		NotFoundRedirect:       normalizeSiteURL(os.Getenv("not_found_redirect")),
 		UseWALMode:             envBool("use_wal_mode", false),
 		EnsureACID:             envBool("ensure_acid", true),
 		FrontendPageSize:       maxInt(envInt("frontend_page_size", 10), 1),
@@ -118,6 +120,9 @@ func Load() Config {
 	}
 	if cfg.PostHogKey != "" {
 		log.Printf("posthog analytics enabled")
+	}
+	if cfg.NotFoundRedirect != "" {
+		log.Printf("404 redirect: %s", cfg.NotFoundRedirect)
 	}
 
 	return cfg

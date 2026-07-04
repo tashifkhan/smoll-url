@@ -600,7 +600,7 @@ func (s *Server) handlePostHogAPIProxy(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) proxyPostHog(w http.ResponseWriter, r *http.Request, rawTarget, stripPrefix, targetPrefix string) {
 	if s.cfg.PostHogKey == "" {
-		write404(w)
+		s.write404(w, r)
 		return
 	}
 
@@ -672,7 +672,7 @@ func (s *Server) handleDeleteLink(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		write404(w)
+		s.write404(w, r)
 		return
 	}
 
@@ -698,13 +698,13 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.URL.Path == "/" {
-		write404(w)
+		s.write404(w, r)
 		return
 	}
 
 	shortlink := strings.TrimPrefix(r.URL.Path, "/")
 	if strings.Contains(shortlink, "/") || shortlink == "" || !s.validSlugRegex.MatchString(shortlink) {
-		write404(w)
+		s.write404(w, r)
 		return
 	}
 
@@ -716,7 +716,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 
 	longURL, _, expiryTime, err := s.store.FindURL(shortlink)
 	if err != nil {
-		write404(w)
+		s.write404(w, r)
 		return
 	}
 	s.cache.set(shortlink, longURL, expiryTime)
@@ -943,7 +943,11 @@ func writeText(w http.ResponseWriter, status int, text string) {
 	_, _ = io.WriteString(w, text)
 }
 
-func write404(w http.ResponseWriter) {
+func (s *Server) write404(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.NotFoundRedirect != "" {
+		http.Redirect(w, r, s.cfg.NotFoundRedirect, http.StatusFound)
+		return
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusNotFound)
 	_, _ = io.WriteString(w, "<!doctype html><html><body><h1>404</h1><p>Not found.</p></body></html>")
