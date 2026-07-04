@@ -9,8 +9,6 @@ import (
 	"log"
 	"mime"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -80,12 +78,6 @@ type backendConfig struct {
 	FrontendPageSize      int    `json:"frontend_page_size"`
 }
 
-type postHogConfig struct {
-	Key              string `json:"key,omitempty"`
-	UIHost           string `json:"ui_host,omitempty"`
-	AnalyticsEnabled bool   `json:"analytics_enabled"`
-}
-
 type addLinkRequest struct {
 	Shortlink   string `json:"shortlink"`
 	Longlink    string `json:"longlink"`
@@ -139,11 +131,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/login", s.handleLogin)
 	mux.HandleFunc("/api/logout", s.handleLogout)
 	mux.HandleFunc("/api/del/", s.handleDeleteLink)
+	mux.HandleFunc("/api/analytics/aggregate", s.handleAggregateAnalytics)
 	mux.HandleFunc("/api/analytics", s.handleAnalytics)
-	mux.HandleFunc("/api/posthog", s.handlePostHogConfig)
-	mux.HandleFunc("/api/posthog/analytics", s.handlePostHogAnalytics)
-	mux.HandleFunc("/ph/static/", s.handlePostHogAssetsProxy)
-	mux.HandleFunc("/ph/", s.handlePostHogAPIProxy)
 
 	if !s.cfg.DisableFrontend {
 		if s.cfg.CustomLandingDirectory == "" {
@@ -577,47 +566,37 @@ func (s *Server) handleAnalytics(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, analytics)
 }
 
-func (s *Server) handlePostHogConfig(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAggregateAnalytics(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeMethodNotAllowed(w)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, postHogConfig{
-		Key:              s.cfg.PostHogKey,
-		UIHost:           s.cfg.PostHogUIHost,
-		AnalyticsEnabled: s.cfg.PostHogProjectID != "" && s.cfg.PostHogPersonalAPIKey != "",
-	})
-}
-
-func (s *Server) handlePostHogAssetsProxy(w http.ResponseWriter, r *http.Request) {
-	s.proxyPostHog(w, r, s.cfg.PostHogAssetsHost, "/ph/static/", "/static/")
-}
-
-func (s *Server) handlePostHogAPIProxy(w http.ResponseWriter, r *http.Request) {
-	s.proxyPostHog(w, r, s.cfg.PostHogAPIHost, "/ph/", "/")
-}
-
-func (s *Server) proxyPostHog(w http.ResponseWriter, r *http.Request, rawTarget, stripPrefix, targetPrefix string) {
-	if s.cfg.PostHogKey == "" {
-		s.write404(w, r)
+	apiResult := auth.IsAPIAuthorized(r, s.cfg)
+	if !apiResult.Success && !s.isSessionValid(r) {
+		writeJSON(w, http.StatusUnauthorized, apiResult)
 		return
 	}
 
-	target, err := url.Parse(rawTarget)
-	if err != nil || target.Scheme == "" || target.Host == "" {
-		writeText(w, http.StatusBadGateway, "PostHog proxy is not configured correctly")
+	days := 30
+	if d := r.URL.Query().Get("days"); d != "" {
+		if n, err := strconv.Atoi(d); err == nil && n >= 0 && n <= 3650 {
+			days = n
+		}
+	}
+
+	if s.store == nil {
+		writeJSON(w, http.StatusServiceUnavailable, JSONResponse{Success: false, Error: true, Reason: "Analytics not available"})
 		return
 	}
 
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	proxy.Director = func(req *http.Request) {
-		req.URL.Scheme = target.Scheme
-		req.URL.Host = target.Host
-		req.URL.Path = targetPrefix + strings.TrimPrefix(req.URL.Path, stripPrefix)
-		req.Host = target.Host
+	analytics, err := s.store.GetAggregateClickAnalytics(days)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, JSONResponse{Success: false, Error: true, Reason: "Failed to fetch aggregate analytics"})
+		return
 	}
-	proxy.ServeHTTP(w, r)
+
+	writeJSON(w, http.StatusOK, analytics)
 }
 
 func (s *Server) handleDeleteLink(w http.ResponseWriter, r *http.Request) {

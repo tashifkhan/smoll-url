@@ -402,6 +402,212 @@ type ClickAnalytics struct {
 	Timeline    []TimelineStat `json:"timeline"`
 }
 
+type AggregateClickAnalytics struct {
+	TotalClicks int64          `json:"total_clicks"`
+	UniqueSlugs int64          `json:"unique_slugs"`
+	Slugs       []CountStat    `json:"slugs"`
+	Countries   []CountStat    `json:"countries"`
+	Devices     []CountStat    `json:"devices"`
+	Browsers    []CountStat    `json:"browsers"`
+	Referrers   []CountStat    `json:"referrers"`
+	Timeline    []TimelineStat `json:"timeline"`
+}
+
+func (s *Store) GetAggregateClickAnalytics(days int) (*AggregateClickAnalytics, error) {
+	var since int64
+	if days > 0 {
+		since = time.Now().UTC().AddDate(0, 0, -days).Unix()
+	}
+
+	result := &AggregateClickAnalytics{
+		Slugs:     []CountStat{},
+		Countries: []CountStat{},
+		Devices:   []CountStat{},
+		Browsers:  []CountStat{},
+		Referrers: []CountStat{},
+		Timeline:  []TimelineStat{},
+	}
+
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM click_events WHERE clicked_at >= ?`, since).Scan(&result.TotalClicks); err != nil {
+		return nil, err
+	}
+
+	if err := s.db.QueryRow(`SELECT COUNT(DISTINCT short_url) FROM click_events WHERE clicked_at >= ?`, since).Scan(&result.UniqueSlugs); err != nil {
+		return nil, err
+	}
+
+	{
+		rows, err := s.db.Query(
+			`SELECT short_url, COUNT(*) as cnt
+			 FROM click_events WHERE clicked_at >= ?
+			 GROUP BY short_url ORDER BY cnt DESC LIMIT 10`,
+			since,
+		)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var stat CountStat
+			if err := rows.Scan(&stat.Label, &stat.Count); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			result.Slugs = append(result.Slugs, stat)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+	}
+
+	{
+		rows, err := s.db.Query(
+			`SELECT COALESCE(NULLIF(country_code,''),'Unknown') as cc, COUNT(*) as cnt
+			 FROM click_events WHERE clicked_at >= ?
+			 GROUP BY cc ORDER BY cnt DESC LIMIT 10`,
+			since,
+		)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var stat CountStat
+			if err := rows.Scan(&stat.Label, &stat.Count); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			result.Countries = append(result.Countries, stat)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+	}
+
+	{
+		rows, err := s.db.Query(
+			`SELECT COALESCE(NULLIF(referer,''),'direct') as ref, COUNT(*) as cnt
+			 FROM click_events WHERE clicked_at >= ?
+			 GROUP BY referer ORDER BY cnt DESC LIMIT 20`,
+			since,
+		)
+		if err != nil {
+			return nil, err
+		}
+		refMap := make(map[string]int64)
+		for rows.Next() {
+			var ref string
+			var cnt int64
+			if err := rows.Scan(&ref, &cnt); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			refMap[extractRefDomain(ref)] += cnt
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		for label, count := range refMap {
+			result.Referrers = append(result.Referrers, CountStat{Label: label, Count: count})
+		}
+		sort.Slice(result.Referrers, func(i, j int) bool {
+			return result.Referrers[i].Count > result.Referrers[j].Count
+		})
+		if len(result.Referrers) > 10 {
+			result.Referrers = result.Referrers[:10]
+		}
+	}
+
+	{
+		rows, err := s.db.Query(`SELECT user_agent FROM click_events WHERE clicked_at >= ?`, since)
+		if err != nil {
+			return nil, err
+		}
+		deviceCounts := make(map[string]int64)
+		browserCounts := make(map[string]int64)
+		for rows.Next() {
+			var ua string
+			if err := rows.Scan(&ua); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			deviceCounts[classifyDevice(ua)]++
+			browserCounts[classifyBrowser(ua)]++
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		for label, count := range deviceCounts {
+			result.Devices = append(result.Devices, CountStat{Label: label, Count: count})
+		}
+		sort.Slice(result.Devices, func(i, j int) bool {
+			return result.Devices[i].Count > result.Devices[j].Count
+		})
+		for label, count := range browserCounts {
+			result.Browsers = append(result.Browsers, CountStat{Label: label, Count: count})
+		}
+		sort.Slice(result.Browsers, func(i, j int) bool {
+			return result.Browsers[i].Count > result.Browsers[j].Count
+		})
+	}
+
+	{
+		nowUTC := time.Now().UTC()
+		sinceTime := time.Unix(since, 0).UTC()
+		if days > 0 {
+			sinceTime = nowUTC.AddDate(0, 0, -days)
+		}
+		sinceDay := time.Date(sinceTime.Year(), sinceTime.Month(), sinceTime.Day(), 0, 0, 0, 0, time.UTC)
+		today := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
+
+		rows, err := s.db.Query(
+			`SELECT strftime('%Y-%m-%d', datetime(clicked_at, 'unixepoch')) as day, COUNT(*) as cnt
+			 FROM click_events WHERE clicked_at >= ?
+			 GROUP BY day ORDER BY day ASC`,
+			since,
+		)
+		if err != nil {
+			return nil, err
+		}
+		dayMap := make(map[string]int64)
+		var firstDay string
+		for rows.Next() {
+			var stat TimelineStat
+			if err := rows.Scan(&stat.Date, &stat.Count); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			dayMap[stat.Date] = stat.Count
+			if firstDay == "" {
+				firstDay = stat.Date
+			}
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+
+		var start time.Time
+		if days > 0 {
+			start = sinceDay
+		} else if firstDay != "" {
+			start, _ = time.Parse("2006-01-02", firstDay)
+		} else {
+			start = today
+		}
+
+		start = time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, time.UTC)
+		for d := start; !d.After(today); d = d.AddDate(0, 0, 1) {
+			key := d.Format("2006-01-02")
+			result.Timeline = append(result.Timeline, TimelineStat{Date: key, Count: dayMap[key]})
+		}
+	}
+
+	return result, nil
+}
+
 func (s *Store) GetClickAnalytics(shortlink string, days int) (*ClickAnalytics, error) {
 	var since int64
 	if days > 0 {

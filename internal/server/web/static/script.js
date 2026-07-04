@@ -1,35 +1,6 @@
 const loginView = document.getElementById("login-view");
 const appView = document.getElementById("app-view");
 
-async function initPostHog() {
-  try {
-    const res = await fetch("/api/posthog");
-    if (!res.ok) return;
-
-    const cfg = await res.json();
-    if (cfg.analytics_enabled) {
-      initPostHogDashboard();
-    }
-    if (!cfg.key) return;
-
-    const script = document.createElement("script");
-    script.async = true;
-    script.src = "/ph/static/array.js";
-    script.onload = () => {
-      if (!window.posthog) return;
-      window.posthog.init(cfg.key, {
-        api_host: "/ph",
-        ui_host: cfg.ui_host || "https://eu.posthog.com",
-      });
-    };
-    document.head.appendChild(script);
-  } catch (e) {
-    // Analytics must never block the admin UI.
-  }
-}
-
-initPostHog();
-
 const createForm = document.getElementById("create-form");
 const editForm = document.getElementById("edit-form");
 const loginForm = document.getElementById("login-form");
@@ -101,8 +72,8 @@ async function checkAuth() {
       appView.style.display = "block";
       logoutBtn.style.display = role === "admin" ? "inline-block" : "none";
       await refreshTable();
-      if (role === "admin" && document.getElementById('posthog-panel')?.style.display !== 'none') {
-        await loadPostHogDashboard();
+      if (role === "admin" && document.getElementById('aggregate-panel')?.style.display !== 'none') {
+        await loadAggregateDashboard();
       }
     } else {
       loginView.style.display = "block";
@@ -528,39 +499,23 @@ function renderAnalyticsContent(data, days) {
   `;
 }
 
-let currentPostHogDays = 7;
+let currentAggregateDays = 7;
 
-function postHogEntries(entries, labelTransform) {
-  return (entries || []).map(item => ({
-    label: labelTransform ? labelTransform(item.key || 'Unknown') : (item.key || 'Unknown'),
-    count: item.pageviews || 0,
+function renderAggregateContent(data, days) {
+  const countries = (data.countries || []).map(c => ({
+    label: `${flagEmoji(c.label)} ${c.label}`,
+    count: c.count,
   }));
-}
-
-function renderPostHogContent(data, days) {
-  const totals = (data.timeseries || []).reduce((acc, item) => {
-    acc.pageviews += item.pageviews || 0;
-    acc.visitors += item.visitors || 0;
-    return acc;
-  }, { pageviews: 0, visitors: 0 });
-
-  const timeline = (data.timeseries || []).map(item => ({
-    date: String(item.date || '').slice(0, 10),
-    count: item.pageviews || 0,
-  }));
-
-  const stats = data.stats || {};
-  const countries = postHogEntries(stats.country, code => `${flagEmoji(code)} ${code}`);
 
   return `
     <div class="analytics-summary">
       <div class="summary-stat">
-        <span class="summary-label">PAGEVIEWS</span>
-        <span class="summary-value text-lime">${totals.pageviews.toLocaleString()}</span>
+        <span class="summary-label">TOTAL_CLICKS</span>
+        <span class="summary-value text-lime">${(data.total_clicks || 0).toLocaleString()}</span>
       </div>
       <div class="summary-stat">
-        <span class="summary-label">VISITORS</span>
-        <span class="summary-value text-cyan">${totals.visitors.toLocaleString()}</span>
+        <span class="summary-label">ACTIVE_SLUGS</span>
+        <span class="summary-value text-cyan">${(data.unique_slugs || 0).toLocaleString()}</span>
       </div>
       <div class="summary-stat">
         <span class="summary-label">TIME_RANGE</span>
@@ -569,18 +524,18 @@ function renderPostHogContent(data, days) {
     </div>
 
     <div class="analytics-section">
-      <h3 class="analytics-section-title">>::  PAGEVIEW_TIMELINE</h3>
-      ${renderTimeline(timeline)}
+      <h3 class="analytics-section-title">>::  CLICK_TIMELINE</h3>
+      ${renderTimeline(data.timeline)}
     </div>
 
     <div class="analytics-grid-2">
       <div class="analytics-section">
-        <h3 class="analytics-section-title">>::  TOP_PATHS</h3>
-        ${renderBarChart(postHogEntries(stats.path), '--lime-accent', 28)}
+        <h3 class="analytics-section-title">>::  TOP_SLUGS</h3>
+        ${renderBarChart(data.slugs, '--lime-accent', 28)}
       </div>
       <div class="analytics-section">
         <h3 class="analytics-section-title">>::  TOP_REFERRERS</h3>
-        ${renderBarChart(postHogEntries(stats.referrer), '--cyan-primary', 28)}
+        ${renderBarChart(data.referrers, '--cyan-primary', 28)}
       </div>
     </div>
 
@@ -592,50 +547,52 @@ function renderPostHogContent(data, days) {
       <div>
         <div class="analytics-section">
           <h3 class="analytics-section-title">>::  DEVICE_TYPES</h3>
-          ${renderBarChart(postHogEntries(stats.device_type), '--lime-accent', 14)}
+          ${renderBarChart(data.devices, '--lime-accent', 14)}
         </div>
         <div class="analytics-section">
-          <h3 class="analytics-section-title">>::  OPERATING_SYSTEMS</h3>
-          ${renderBarChart(postHogEntries(stats.os_name), '--lime-accent', 14)}
+          <h3 class="analytics-section-title">>::  BROWSERS</h3>
+          ${renderBarChart(data.browsers, '--lime-accent', 14)}
         </div>
       </div>
     </div>
   `;
 }
 
-async function loadPostHogDashboard() {
-  const content = document.getElementById('posthog-content');
+async function loadAggregateDashboard() {
+  const content = document.getElementById('aggregate-content');
   if (!content) return;
-  content.innerHTML = '<div class="analytics-loading">FETCHING_POSTHOG_DATA...</div>';
+  content.innerHTML = '<div class="analytics-loading">FETCHING_SQL_TELEMETRY...</div>';
 
   try {
-    const res = await fetch(`/api/posthog/analytics?days=${currentPostHogDays}`);
+    const res = await fetch(`/api/analytics/aggregate?days=${currentAggregateDays}`);
     if (!res.ok) throw new Error('fetch failed');
     const data = await res.json();
-    content.innerHTML = renderPostHogContent(data, currentPostHogDays);
+    content.innerHTML = renderAggregateContent(data, currentAggregateDays);
   } catch (e) {
-    content.innerHTML = '<div class="analytics-error">ERR_POSTHOG_ANALYTICS_UNAVAILABLE</div>';
+    content.innerHTML = '<div class="analytics-error">ERR_SQL_ANALYTICS_UNAVAILABLE</div>';
   }
 }
 
-function initPostHogDashboard() {
-  const panel = document.getElementById('posthog-panel');
+function initAggregateDashboard() {
+  const panel = document.getElementById('aggregate-panel');
   if (!panel) return;
 
   panel.style.display = 'block';
-  document.querySelectorAll('.ph-period-btn').forEach(btn => {
+  document.querySelectorAll('.aggregate-period-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      currentPostHogDays = Number(btn.dataset.days);
-      document.querySelectorAll('.ph-period-btn').forEach(b => {
+      currentAggregateDays = Number(btn.dataset.days);
+      document.querySelectorAll('.aggregate-period-btn').forEach(b => {
         b.classList.toggle('active', b === btn);
       });
-      loadPostHogDashboard();
+      loadAggregateDashboard();
     });
   });
   if (appView.style.display !== 'none' && logoutBtn.style.display !== 'none') {
-    loadPostHogDashboard();
+    loadAggregateDashboard();
   }
 }
+
+initAggregateDashboard();
 
 async function loadAnalytics() {
   const content = document.getElementById('analytics-content');
